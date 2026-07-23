@@ -1,7 +1,7 @@
 # ModelOps — System Architecture
 
-> **Owner:** Ahmed Amir Rusrus — Integration Lead / Solution Architect  
-> **Last updated:** Pre-Session 1  
+> **Owner:** Ahmed Amir Rusrus — Integration Lead / Solution Architect
+> **Last updated:** Pre-Session 1
 > **Status:** Draft — to be agreed by all members before Session 2
 
 ---
@@ -43,14 +43,15 @@ graph TD
 
 ## 3. Module Ownership
 
-| Module | Owner | Boundary |
-|---|---|---|
-| Architecture, contracts, integration, deployment | **Ahmed** | Everything that connects the parts |
-| API route, validation, AI providers, schema | **Moamen** | Server-side only. No secret reaches the client |
-| UI pages, form, result render, all UI states | **Mohamed** | Works against real API contract — not mocks-only |
-| Deterministic tools, knowledge corpus, eval cases | **Zein** | `readiness_score()` and `compare_runs()` are pure functions. No AI logic inside them |
 
-**Dependency order:** Zein → Moamen → Mohamed → Ahmed → Production
+| Module                                            | Owner       | Boundary                                                                             |
+| ------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------ |
+| Architecture, contracts, integration, deployment  | **Ahmed**   | Everything that connects the parts                                                   |
+| API route, validation, AI providers, schema       | **Haneen**  | Server-side only. No secret reaches the client                                       |
+| UI pages, form, result render, all UI states      | **Mohamed** | Works against real API contract — not mocks-only                                    |
+| Deterministic tools, knowledge corpus, eval cases | **Zein**    | `readiness_score()` and `compare_runs()` are pure functions. No AI logic inside them |
+
+**Dependency order:** Zein → Haneen→ Mohamed → Ahmed → Production
 
 ---
 
@@ -65,9 +66,9 @@ modelops/
 │   │   │   └── page.tsx                    # Main workflow page [Mohamed]
 │   │   └── api/
 │   │       └── modelops/
-│   │           ├── route.ts                # POST /api/modelops — generate card [Moamen]
+│   │           ├── route.ts                # POST /api/modelops — generate card [Haneen]
 │   │           └── compare/
-│   │               └── route.ts            # POST /api/modelops/compare [Moamen + Zein]
+│   │               └── route.ts            # POST /api/modelops/compare [Haneen+ Zein]
 │   ├── components/
 │   │   ├── modelops/
 │   │   │   ├── InputForm.tsx               # Experiment intake [Mohamed]
@@ -79,12 +80,12 @@ modelops/
 │   │       └── ErrorState.tsx              # [Mohamed]
 │   └── lib/
 │       ├── schemas/
-│       │   └── model-card.ts               # ModelCardOutput interface + Zod [Moamen]
+│       │   └── model-card.ts               # ModelCardOutput interface + Zod [Haneen]
 │       ├── validators/
-│       │   └── experiment.ts               # Input Zod schema [Moamen]
+│       │   └── experiment.ts               # Input Zod schema [Haneen]
 │       ├── providers/
-│       │   ├── groq.ts                     # Primary provider [Moamen]
-│       │   └── gemini.ts                   # Fallback + structured output [Moamen]
+│       │   ├── groq.ts                     # Primary provider [Haneen]
+│       │   └── gemini.ts                   # Fallback + structured output [Haneen]
 │       ├── tools/
 │       │   ├── readiness-score.ts          # Deterministic — no AI [Zein]
 │       │   └── compare-runs.ts             # Deterministic — no AI [Zein]
@@ -92,7 +93,7 @@ modelops/
 │           └── source-register.ts          # Approved sources [Zein]
 ├── tests/
 │   ├── api/
-│   │   └── modelops.test.ts                # API + schema tests [Moamen]
+│   │   └── modelops.test.ts                # API + schema tests [Haneen]
 │   ├── tools/
 │   │   ├── readiness-score.test.ts         # [Zein]
 │   │   └── compare-runs.test.ts            # [Zein]
@@ -115,10 +116,11 @@ modelops/
 
 ## 5. API Surface (Contracts Frozen in Session 2)
 
-| Route | Method | Owner | What it does |
-|---|---|---|---|
-| `/api/modelops` | POST | Moamen | Validate → AI draft → readiness score → return `ModelCardOutput` |
-| `/api/modelops/compare` | POST | Moamen + Zein | Deterministic run comparison → return diff result |
+
+| Route                   | Method | Owner        | What it does                                                       |
+| ----------------------- | ------ | ------------ | ------------------------------------------------------------------ |
+| `/api/modelops`         | POST   | Haneen       | Validate → AI draft → readiness score → return`ModelCardOutput` |
+| `/api/modelops/compare` | POST   | Haneen+ Zein | Deterministic run comparison → return diff result                 |
 
 Full request/response shapes live in `docs/api-contracts.md`.
 
@@ -148,10 +150,11 @@ interface ModelCardOutput {
 
 ## 7. Provider Strategy
 
-| Priority | Provider | Role |
-|---|---|---|
-| 1 | **Groq** | Primary — fast text generation |
-| 2 | **Gemini** | Fallback + guaranteed structured output |
+
+| Priority | Provider   | Role                                    |
+| -------- | ---------- | --------------------------------------- |
+| 1        | **Groq**   | Primary — fast text generation         |
+| 2        | **Gemini** | Fallback + guaranteed structured output |
 
 If both fail → safe error response to client. Error details stay server-side. No provider error message is forwarded to the browser.
 
@@ -172,9 +175,10 @@ If both fail → safe error response to client. Error details stay server-side. 
 
 Documented in `.env.example`. Set in Vercel dashboard for production.
 
-| Variable | Used by | Side |
-|---|---|---|
-| `GROQ_API_KEY` | `lib/providers/groq.ts` | Server only |
+
+| Variable         | Used by                   | Side        |
+| ---------------- | ------------------------- | ----------- |
+| `GROQ_API_KEY`   | `lib/providers/groq.ts`   | Server only |
 | `GEMINI_API_KEY` | `lib/providers/gemini.ts` | Server only |
 
 ---
@@ -183,26 +187,28 @@ Documented in `.env.example`. Set in Vercel dashboard for production.
 
 This architecture is designed to grow without rewiring. Future additions slot in cleanly:
 
-| Future feature | Where it slots in |
-|---|---|
-| Persist experiment runs | Add `lib/storage/` — Moamen owns the interface |
-| More AI providers (OpenAI, etc.) | New file under `lib/providers/` — no other files change |
-| Export model card as PDF | New component under `components/modelops/` — Mohamed owns |
-| More deterministic tools | New file under `lib/tools/` — Zein owns |
-| Auth / user accounts | Middleware layer at `src/middleware.ts` — Ahmed owns |
-| CI status checks | `.github/workflows/` — Ahmed enables in Session 4 |
+
+| Future feature                   | Where it slots in                                         |
+| -------------------------------- | --------------------------------------------------------- |
+| Persist experiment runs          | Add`lib/storage/` — Moamen owns the interface            |
+| More AI providers (OpenAI, etc.) | New file under`lib/providers/` — no other files change   |
+| Export model card as PDF         | New component under`components/modelops/` — Mohamed owns |
+| More deterministic tools         | New file under`lib/tools/` — Zein owns                   |
+| Auth / user accounts             | Middleware layer at`src/middleware.ts` — Ahmed owns      |
+| CI status checks                 | `.github/workflows/` — Ahmed enables in Session 4        |
 
 ---
 
 ## 11. Session Gate Checkpoints
 
-| Session | Architecture milestone |
-|---|---|
-| **1** | This document agreed by all members |
-| **2** | `docs/api-contracts.md` frozen and signed off — no contract changes without Ahmed |
-| **3** | All modules running on `dev` end-to-end, no mocks in critical path |
-| **4** | Production build clean on Vercel, env vars set, rollback documented |
-| **5** | Every member can explain their module boundary from this document |
+
+| Session | Architecture milestone                                                             |
+| ------- | ---------------------------------------------------------------------------------- |
+| **1**   | This document agreed by all members                                                |
+| **2**   | `docs/api-contracts.md` frozen and signed off — no contract changes without Ahmed |
+| **3**   | All modules running on`dev` end-to-end, no mocks in critical path                  |
+| **4**   | Production build clean on Vercel, env vars set, rollback documented                |
+| **5**   | Every member can explain their module boundary from this document                  |
 
 ---
 
