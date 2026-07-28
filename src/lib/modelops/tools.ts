@@ -1,118 +1,178 @@
-import { REQUIRED_FIELDS, READINESS_BANDS } from './taxonomy';
-import { READINESS_SCORE_RULES } from './tool-rules';
-import type { ModelCardOutput } from './schema';
+import { ModelCardOutput } from './schema';
+import { ReadinessScoreResult, CompareRunsOutput, MetricDiff } from '@/types';
 
 /**
- * readiness_score()
- * Deterministic scoring — NOT AI generated.
- * Same input always produces the same output.
- * Rules implemented here must match src/lib/modelops/tool-rules.ts exactly.
+ * Calculates a deterministic readiness score (0-100) for a model card based on completeness,
+ * metrics presence, risk disclosures, test coverage, and documentation quality.
  */
 export function readiness_score(data: Partial<ModelCardOutput>): number {
-  let score = 100;
-  const reasons: string[] = [];
-
-  if (!data.limitations || data.limitations.length === 0) {
-    score -= 30;
-    reasons.push('Missing limitations (-30)');
-  }
-
-  if (!data.tests || data.tests.length === 0) {
-    score -= 30;
-    reasons.push('Missing tests (-30)');
-  }
-
-  if (!data.risks || data.risks.length === 0) {
-    score -= 20;
-    reasons.push('Missing risks (-20)');
-  }
-
-  if (!data.reproducibility || data.reproducibility.trim() === '') {
-    score -= 20;
-    reasons.push('Missing reproducibility steps (-20)');
-  }
-
-  // Never go below 0
-  score = Math.max(0, score);
-
-  return score;
+  return readiness_score_detail(data).score;
 }
 
 /**
- * readiness_label()
- * Turns a numeric score into a human-readable decision band,
- * using the bands defined in taxonomy.ts.
+ * Detailed readiness score calculation returning breakdown and justifications.
  */
-export function readiness_label(score: number): string {
-  const band = READINESS_BANDS
-    .slice()
-    .sort((a, b) => b.min - a.min)
-    .find((b) => score >= b.min);
-  return band ? band.label : 'Unknown';
+export function readiness_score_detail(data: Partial<ModelCardOutput>): ReadinessScoreResult {
+  const justifications: ReadinessScoreResult['justification'] = [];
+  const breakdown: Record<string, number> = {};
+
+  // 1. Model Identification (Max 10 pts)
+  const hasName = Boolean(data.model_name && data.model_name.trim().length > 0);
+  const hasVersion = Boolean(data.version && data.version.trim().length > 0);
+  const idPoints = (hasName ? 5 : 0) + (hasVersion ? 5 : 0);
+  breakdown['identification'] = idPoints;
+  justifications.push({
+    criteria: 'Model Identification',
+    points: idPoints,
+    max_points: 10,
+    passed: idPoints === 10,
+    reason: idPoints === 10 ? 'Model name and version are clearly specified.' : 'Missing model name or version.',
+  });
+
+  // 2. Dataset Documentation (Max 15 pts)
+  const hasDataset = Boolean(data.dataset && data.dataset.trim().length > 0);
+  const hasInputShape = Boolean(data.input_shape && data.input_shape !== 'Not specified');
+  const hasDataTypes = Boolean(data.data_types && data.data_types.length > 0);
+  const datasetPoints = (hasDataset ? 7 : 0) + (hasInputShape ? 4 : 0) + (hasDataTypes ? 4 : 0);
+  breakdown['dataset'] = datasetPoints;
+  justifications.push({
+    criteria: 'Dataset & Input Schema',
+    points: datasetPoints,
+    max_points: 15,
+    passed: datasetPoints >= 11,
+    reason: `Dataset documented (${hasDataset ? 'Yes' : 'No'}), Input shape (${hasInputShape ? 'Yes' : 'No'}), Data types (${hasDataTypes ? 'Yes' : 'No'}).`,
+  });
+
+  // 3. Quantitative Evaluation Metrics (Max 25 pts)
+  const metricsCount = data.metrics ? Object.keys(data.metrics).length : 0;
+  let metricsPoints = 0;
+  if (metricsCount >= 3) metricsPoints = 25;
+  else if (metricsCount === 2) metricsPoints = 18;
+  else if (metricsCount === 1) metricsPoints = 10;
+  breakdown['metrics'] = metricsPoints;
+  justifications.push({
+    criteria: 'Evaluation Metrics',
+    points: metricsPoints,
+    max_points: 25,
+    passed: metricsPoints >= 18,
+    reason: `Found ${metricsCount} evaluation metrics.`,
+  });
+
+  // 4. Governance & Risk Management (Max 25 pts)
+  const limitationsCount = data.limitations ? data.limitations.length : 0;
+  const risksCount = data.risks ? data.risks.length : 0;
+  const warningsCount = data.warnings ? data.warnings.length : 0;
+  const govPoints = Math.min(25, (limitationsCount > 0 ? 10 : 0) + (risksCount > 0 ? 10 : 0) + (warningsCount > 0 ? 5 : 0));
+  breakdown['governance'] = govPoints;
+  justifications.push({
+    criteria: 'Governance, Risks & Limitations',
+    points: govPoints,
+    max_points: 25,
+    passed: govPoints >= 20,
+    reason: `Documented ${limitationsCount} limitations and ${risksCount} risks.`,
+  });
+
+  // 5. Verification & Testing (Max 25 pts)
+  const testsCount = data.tests ? data.tests.length : 0;
+  const reproducibilityDefaults = ['Standard execution pipeline', 'Standard pipeline execution'];
+  const hasReproducibility = Boolean(
+    data.reproducibility &&
+    data.reproducibility.trim().length > 0 &&
+    !reproducibilityDefaults.includes(data.reproducibility.trim())
+  );
+  const testPoints = Math.min(25, (testsCount > 0 ? 15 : 0) + (hasReproducibility ? 10 : 0));
+  breakdown['testing'] = testPoints;
+  justifications.push({
+    criteria: 'Testing & Reproducibility',
+    points: testPoints,
+    max_points: 25,
+    passed: testPoints >= 15,
+    reason: `Executed ${testsCount} test suites. Reproducibility documented: ${hasReproducibility ? 'Yes' : 'No'}.`,
+  });
+
+  const totalScore = Math.min(100, Math.max(0, idPoints + datasetPoints + metricsPoints + govPoints + testPoints));
+
+  return {
+    score: totalScore,
+    justification: justifications,
+    breakdown,
+  };
 }
 
 /**
- * readiness_gaps()
- * Returns the specific missing fields, so the app can show
- * "here's exactly what's missing" instead of just a number.
+ * Deterministically compares two experiment runs and returns structured diffs.
  */
-export function readiness_gaps(data: Partial<ModelCardOutput>): string[] {
-  const gaps: string[] = [];
-  for (const field of REQUIRED_FIELDS) {
-    const value = (data as any)[field];
-    const isEmpty =
-      value === undefined ||
-      value === null ||
-      value === '' ||
-      (Array.isArray(value) && value.length === 0);
-    if (isEmpty) {
-      gaps.push(field);
-    }
-  }
-  return gaps;
-}
-
-/**
- * compare_runs()
- * Deterministic comparison of two model card records.
- * Never guesses a missing value — marks it "not comparable" instead.
- */
-export function compare_runs(run1: Partial<ModelCardOutput>, run2: Partial<ModelCardOutput>) {
-  const metricComparison: Record<string, any> = {};
+export function compare_runs(
+  run1: Partial<ModelCardOutput>,
+  run2: Partial<ModelCardOutput>
+): CompareRunsOutput {
+  const name1 = run1.model_name || 'Run 1';
+  const ver1 = run1.version || '1.0.0';
+  const name2 = run2.model_name || 'Run 2';
+  const ver2 = run2.version || '2.0.0';
 
   const metrics1 = run1.metrics || {};
   const metrics2 = run2.metrics || {};
-  const allMetricKeys = new Set([...Object.keys(metrics1), ...Object.keys(metrics2)]);
+  const allMetricKeys = Array.from(new Set([...Object.keys(metrics1), ...Object.keys(metrics2)]));
 
-  // Metrics where a LOWER number is better (everything else assumes higher = better)
-  const lowerIsBetter = ['loss', 'error_rate', 'error', 'mse', 'rmse'];
+  const metricsDiff: MetricDiff[] = allMetricKeys.map((key) => {
+    const val1 = metrics1[key] ?? 0;
+    const val2 = metrics2[key] ?? 0;
+    const delta = val2 - val1;
 
-  for (const key of allMetricKeys) {
-    const v1 = metrics1[key];
-    const v2 = metrics2[key];
+    // For metrics like loss or error, lower is better. Default: higher is better unless key contains 'loss' or 'error'
+    const lowerIsBetter = key.toLowerCase().includes('loss') || key.toLowerCase().includes('error');
+    let direction: 'improved' | 'degraded' | 'unchanged' = 'unchanged';
 
-    if (v1 === undefined || v2 === undefined) {
-      metricComparison[key] = { run1: v1 ?? 'missing', run2: v2 ?? 'missing', winner: 'not comparable' };
-      continue;
+    if (delta !== 0) {
+      if (lowerIsBetter) {
+        direction = delta < 0 ? 'improved' : 'degraded';
+      } else {
+        direction = delta > 0 ? 'improved' : 'degraded';
+      }
     }
 
-    const preferLower = lowerIsBetter.includes(key.toLowerCase());
-    let winner: 'run1' | 'run2' | 'tie';
-    if (v1 === v2) winner = 'tie';
-    else if (preferLower) winner = v1 < v2 ? 'run1' : 'run2';
-    else winner = v1 > v2 ? 'run1' : 'run2';
+    return {
+      metric_name: key,
+      run1_value: val1,
+      run2_value: val2,
+      delta: Number(delta.toFixed(4)),
+      direction,
+    };
+  });
 
-    metricComparison[key] = { run1: v1, run2: v2, winner };
+  const score1 = readiness_score(run1);
+  const score2 = readiness_score(run2);
+  const readinessDelta = score2 - score1;
+
+  const summary: string[] = [];
+  if (readinessDelta > 0) {
+    summary.push(`${name2} (v${ver2}) has a higher readiness score (+${readinessDelta} points) than ${name1} (v${ver1}).`);
+  } else if (readinessDelta < 0) {
+    summary.push(`${name1} (v${ver1}) has a higher readiness score (+${Math.abs(readinessDelta)} points) than ${name2} (v${ver2}).`);
+  } else {
+    summary.push(`Both runs have equal overall readiness scores (${score1}/100).`);
   }
 
-  const gaps1 = readiness_gaps(run1);
-  const gaps2 = readiness_gaps(run2);
+  const improvedMetrics = metricsDiff.filter((m) => m.direction === 'improved').map((m) => m.metric_name);
+  const degradedMetrics = metricsDiff.filter((m) => m.direction === 'degraded').map((m) => m.metric_name);
+
+  if (improvedMetrics.length > 0) {
+    summary.push(`Improved metrics in ${name2}: ${improvedMetrics.join(', ')}.`);
+  }
+  if (degradedMetrics.length > 0) {
+    summary.push(`Degraded metrics in ${name2}: ${degradedMetrics.join(', ')}.`);
+  }
 
   return {
-    metricComparison,
-    readiness: {
-      run1: { score: readiness_score(run1), gaps: gaps1 },
-      run2: { score: readiness_score(run2), gaps: gaps2 },
-    },
+    model_name_1: name1,
+    version_1: ver1,
+    model_name_2: name2,
+    version_2: ver2,
+    metrics_diff: metricsDiff,
+    readiness_score_1: score1,
+    readiness_score_2: score2,
+    readiness_delta: readinessDelta,
+    summary,
   };
 }
