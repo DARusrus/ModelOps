@@ -176,4 +176,3 @@ export function compare_runs(
     summary,
   };
 }
-
