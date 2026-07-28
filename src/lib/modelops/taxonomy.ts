@@ -2,38 +2,79 @@
  * Domain Taxonomy for ModelOps
  * Owner: Zein ElDin Mohamed Farouk
  *
- * This file defines, in plain terms, what "complete" and "ready" mean
- * for a model card. These definitions are used by readiness_score()
- * and compare_runs() in tools.ts, and must stay in sync with them.
+ * This documents the REAL scoring rubric as implemented in
+ * src/lib/modelops/tools.ts (readiness_score_detail). If tools.ts
+ * changes, this file must be updated to match — it exists so anyone
+ * can understand the scoring system without reading the code.
  */
 
-// --- Documentation completeness ---
-// A model card is considered "documented" only if ALL of these are present:
-export const REQUIRED_FIELDS = [
-  'model_name',
-  'version',
-  'dataset',
-  'metrics',
-  'intended_use',
-  'limitations',
-  'risks',
-  'tests',
-  'reproducibility',
+// --- Scoring categories and their maximum points ---
+export const SCORING_CATEGORIES = [
+  {
+    key: 'identification',
+    label: 'Model Identification',
+    max_points: 10,
+    checks: ['model_name is non-empty (+5)', 'version is non-empty (+5)'],
+  },
+  {
+    key: 'dataset',
+    label: 'Dataset & Input Schema',
+    max_points: 15,
+    checks: [
+      'dataset is non-empty (+7)',
+      'input_shape is set and not "Not specified" (+4)',
+      'data_types is a non-empty list (+4)',
+    ],
+  },
+  {
+    key: 'metrics',
+    label: 'Evaluation Metrics',
+    max_points: 25,
+    checks: [
+      '0 metrics = 0 pts',
+      '1 metric = 10 pts',
+      '2 metrics = 18 pts',
+      '3+ metrics = 25 pts',
+    ],
+  },
+  {
+    key: 'governance',
+    label: 'Governance, Risks & Limitations',
+    max_points: 25,
+    checks: [
+      'limitations non-empty (+10)',
+      'risks non-empty (+10)',
+      'warnings non-empty (+5)',
+    ],
+  },
+  {
+    key: 'testing',
+    label: 'Testing & Reproducibility',
+    max_points: 25,
+    checks: [
+      'tests non-empty (+15)',
+      'reproducibility present and not a generic placeholder like "Standard execution pipeline" (+10)',
+    ],
+  },
 ] as const;
 
-// --- Test coverage rules ---
-// A model card is considered "tested" if it lists at least one
-// recognized test type. Add more as the team agrees on them.
-export const RECOGNIZED_TEST_TYPES = [
-  'unit test',
-  'integration test',
-  'bias/fairness test',
-  'performance/regression test',
-  'security test',
+// --- Required fields for a fully documented model card ---
+// (matches ModelCardOutputSchema in schema.ts)
+export const REQUIRED_FIELDS = [
+  'model_name', 'version', 'dataset', 'input_shape', 'data_types',
+  'metrics', 'intended_use', 'warnings', 'limitations', 'risks',
+  'tests', 'reproducibility',
+] as const;
+
+// --- Score bands used to translate a number into a decision ---
+export const READINESS_BANDS = [
+  { min: 90, label: 'Ready for release' },
+  { min: 70, label: 'Ready with reservations — human review required' },
+  { min: 50, label: 'Not ready — major gaps present' },
+  { min: 0, label: 'Not ready — critical information missing' },
 ];
 
-// --- Risk severity levels ---
-// Used to decide whether a risk is "known/acceptable" or "blocking."
+// --- Risk severity levels (defined for future use — see tool-rules.ts note) ---
 export type RiskSeverity = 'low' | 'medium' | 'high' | 'blocking';
 
 export const RISK_SEVERITY_RULES: Record<RiskSeverity, string> = {
@@ -42,12 +83,3 @@ export const RISK_SEVERITY_RULES: Record<RiskSeverity, string> = {
   high: 'Significant risk, requires mitigation plan before release.',
   blocking: 'Unacceptable risk — release must be rejected until resolved.',
 };
-
-// --- Readiness bands ---
-// Used to translate a numeric score into a human decision category.
-export const READINESS_BANDS = [
-  { min: 90, label: 'Ready for release' },
-  { min: 70, label: 'Ready with reservations — human review required' },
-  { min: 50, label: 'Not ready — major gaps present' },
-  { min: 0, label: 'Not ready — critical information missing' },
-];
