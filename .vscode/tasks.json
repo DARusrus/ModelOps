@@ -1,0 +1,131 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run validator tests",
+			"type": "shell",
+			"command": "npm test -- --run tests/lib/validators.test.ts",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run full verification",
+			"type": "shell",
+			"command": "npm run lint && npm run build && npm test",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run lint",
+			"type": "shell",
+			"command": "npm run lint",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run build",
+			"type": "shell",
+			"command": "npm run build",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run full test suite",
+			"type": "shell",
+			"command": "npm test",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Debug parser snippet",
+			"type": "shell",
+			"command": "node -e \"const rawText='\\n{\\n  \\\"model_name\\\": \\\"DemoModel\\\",\\n  \\\"version\\\": \\\"1.0\\\",\\n  \\\"dataset\\\": \\\"DemoData\\\",\\n  \\\"overview\\\": \\\"A compact overview\\\",\\n  \\\"architecture\\\": \\\"Transformer-based workflow\\\",\\n  \\\"limitations\\\": [\\\"English only\\\", 42],\\n  \\\"metrics\\\": {\\\"accuracy\\\": 1, \\\"f1_score\\\": 0.91},\\n  \\\"warnings\\\": [\\\"Needs human review\\\"]\\n'; let cleaned=rawText.trim(); let parsed; const tryParseJson=(candidate)=>{const attempts=[candidate]; if(candidate.startsWith('{')){attempts.push(`${candidate}}`); const normalized=candidate.replace(/,\\\\s*([}\\\\]])/g,'$1'); if(normalized!==candidate){attempts.push(normalized); attempts.push(`${normalized}}`);} } for(const attempt of attempts){try{return JSON.parse(attempt)}catch{}} return null}; try{parsed=JSON.parse(cleaned)}catch{const start=cleaned.indexOf('{'); const end=cleaned.lastIndexOf('}'); const candidate=start!==-1 && end>start ? cleaned.slice(start,end+1): cleaned.trim(); parsed=tryParseJson(candidate);} console.log(JSON.stringify(parsed));\"",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Re-run targeted validator tests",
+			"type": "shell",
+			"command": "npm test -- --run tests/lib/modelops-validators.test.ts",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Re-run modelops validator tests",
+			"type": "shell",
+			"command": "npm test -- --run tests/lib/modelops-validators.test.ts",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Debug JSON recovery",
+			"type": "shell",
+			"command": "node -e 'const s = \"{\\n  \\\"model_name\\\": \\\"DemoModel\\\",\\n  \\\"version\\\": \\\"1.0\\\",\\n  \\\"dataset\\\": \\\"DemoData\\\",\\n  \\\"overview\\\": \\\"A compact overview\\\",\\n  \\\"architecture\\\": \\\"Transformer-based workflow\\\",\\n  \\\"limitations\\\": [\\\"English only\\\", 42],\\n  \\\"metrics\\\": {\\\"accuracy\\\": 1, \\\"f1_score\\\": 0.91},\\n  \\\"warnings\\\": [\\\"Needs human review\\\"]\\n\"; const trimmed=s.trim(); const attempt=trimmed.endsWith(\"}\")?trimmed:`${trimmed}}`; console.log(attempt); console.log(JSON.parse(attempt));'",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Re-run targeted validator tests",
+			"type": "shell",
+			"command": "npm test -- --run tests/lib/modelops-validators.test.ts",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run full test suite again",
+			"type": "shell",
+			"command": "npm test",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run lint",
+			"type": "shell",
+			"command": "npm run lint",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run build",
+			"type": "shell",
+			"command": "npm run build",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run build",
+			"type": "shell",
+			"command": "npm run build",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run full test suite",
+			"type": "shell",
+			"command": "npm test",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run build",
+			"type": "shell",
+			"command": "npm run build",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run lint",
+			"type": "shell",
+			"command": "npm run lint",
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run full test suite",
+			"type": "shell",
+			"command": "npm test",
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}
