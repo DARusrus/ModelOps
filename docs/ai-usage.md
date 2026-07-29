@@ -50,3 +50,43 @@ Raw LLM responses pass through `parseAndValidateAIResponse()` in `src/lib/ai/val
 - Operations log start time, model name, selected AI provider, latency in ms, and readiness score.
 - API keys, secrets, and raw bearer tokens are strictly omitted from logs.
 
+---
+
+## AI Usage — Ahmed Amir Rusrus (Integration Lead / Solution Architect)
+
+> **Last Updated:** 2026-07-29
+
+### Tools Used
+
+| Tool | Purpose |
+|------|---------|
+| Antigravity (Google DeepMind coding agent) | Architecture documentation drafting, CI/CD workflow generation, security checklist, contribution matrix, e2e test scaffolding |
+| GitHub Copilot | Inline suggestions during `.github/` and `docs/` file editing |
+
+### Tasks Delegated to AI
+
+| Task | File(s) Produced | Verification Method |
+|------|------------------|---------------------|
+| GitHub Actions CI workflow | `.github/workflows/ci.yml` | Reviewed all 4 steps manually; verified env var handling matches `src/lib/env.ts`; confirmed test runner is `vitest run` matching `package.json` |
+| E2E workflow tests | `tests/e2e/workflow.test.ts` | All imports verified against actual paths in `src/`; test cases cross-checked against `tests/fixtures/modelops/sample-experiments.json` and `src/lib/modelops/schema.ts` |
+| Contribution matrix | `docs/contribution-matrix.md` | Every file listed verified to exist in repo; ownership verified against `docs/architecture.md` §3 Module Ownership |
+| Security checklist | `docs/security-checklist.md` | Reviewed against OWASP LLM Top 10 and Next.js production checklist |
+| Smoke test script | `scripts/smoke-test.sh` | Routes verified against `docs/api-contracts.md`; expected responses verified against `src/lib/modelops/validators.ts` |
+
+### Files Written Directly by Ahmed (not AI-generated)
+
+- `README.md` — written directly
+- `docs/architecture.md` — written directly; reviewed by all members before Session 2 gate
+- `docs/api-contracts.md` — written directly; agreed by all members
+- `docs/release-checklist.md` — written directly
+- `.env.example` — written directly; no real values committed
+- `vercel.json` — written directly
+- `.github/pull_request_template.md` — written directly
+- `.github/ISSUE_TEMPLATE/` — written directly
+
+### Remaining Open Questions
+
+- Production URL pending Vercel deployment — to be filled in `docs/release-checklist.md`
+- Mohamed (UI/Barakat) frontend integration against real API is pending
+- PR merge evidence for all members pending confirmation on GitHub
+
