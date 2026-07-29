@@ -9,53 +9,53 @@
 
 ### Code Quality
 
-- [ ] `npm run lint` — zero unresolved errors
-- [ ] `npx tsc --noEmit` — zero TypeScript errors
-- [ ] `npm test` — all tests pass
-- [ ] `npm run build` — production build completes without errors
-- [ ] No `console.log` left with sensitive data
-- [ ] No `any` types added since last review (check with `grep -r ": any" src/`)
+- [x] `npm run lint` — zero unresolved errors
+- [x] `npx tsc --noEmit` — zero TypeScript errors
+- [x] `npm test` — all tests pass
+- [x] `npm run build` — production build completes without errors
+- [x] No `console.log` left with sensitive data
+- [x] No `any` types added since last review (check with `grep -r ": any" src/`)
 
 ### Security
 
-- [ ] `GROQ_API_KEY` and `GEMINI_API_KEY` are **not** in any client-side file (`src/app/`, components)
-- [ ] `.env.local` is in `.gitignore` and has never been committed (`git log -- .env.local` returns nothing)
-- [ ] `.env.example` has all variable names with placeholder values only
-- [ ] `git log --all --full-history -- "*.env"` — no secrets in git history
-- [ ] `npm audit` — no critical or high severity vulnerabilities unaddressed
-- [ ] API route validates all input before calling any provider (confirmed in `src/app/api/modelops/route.ts`)
-- [ ] Tool arguments (`compare_runs`, `readiness_score`) are validated before execution
+- [x] `GROQ_API_KEY` and `GEMINI_API_KEY` are **not** in any client-side file (`src/app/`, components)
+- [x] `.env.local` is in `.gitignore` and has never been committed (`git log -- .env.local` returns nothing)
+- [x] `.env.example` has all variable names with placeholder values only
+- [x] `git log --all --full-history -- "*.env"` — no secrets in git history
+- [x] `npm audit` — no critical or high severity vulnerabilities unaddressed
+- [x] API route validates all input before calling any provider (confirmed in `src/app/api/modelops/route.ts`)
+- [x] Tool arguments (`compare_runs`, `readiness_score`) are validated before execution
 
 ### Functional Verification
 
-- [ ] `POST /api/modelops` — valid payload returns `200` with `ModelCardOutput`
-- [ ] `POST /api/modelops` — missing `model_name` returns `400` with field error
-- [ ] `POST /api/modelops` — missing/invalid JSON body returns `400`
-- [ ] `POST /api/modelops/compare` — valid two-run payload returns `200` with metric diffs
-- [ ] `readiness_score` in response is a number computed by the deterministic function — never an AI value
-- [ ] `decision` field in response is always `"pending_human_review"` — never auto-approved
-- [ ] Rate limiting responds with `429` when the threshold is exceeded
-- [ ] Provider fallback: if `GROQ_API_KEY` is invalid, Gemini takes over without a 500
-- [ ] Offline fallback: if both providers fail, a deterministic card is returned without an unhandled exception
+- [x] `POST /api/modelops` — valid payload returns `200` with `ModelCardOutput`
+- [x] `POST /api/modelops` — missing `model_name` returns `400` with field error
+- [x] `POST /api/modelops` — missing/invalid JSON body returns `400`
+- [x] `POST /api/modelops/compare` — valid two-run payload returns `200` with metric diffs
+- [x] `readiness_score` in response is a number computed by the deterministic function — never an AI value
+- [x] `decision` field in response is always `"pending_human_review"` — never auto-approved
+- [x] Rate limiting responds with `429` when the threshold is exceeded
+- [x] Provider fallback: if `GROQ_API_KEY` is invalid, Gemini takes over without a 500
+- [x] Offline fallback: if both providers fail, a deterministic card is returned without an unhandled exception
 
 ### UI / UX
 
-- [ ] Main workflow completes on desktop (form submit → result render)
-- [ ] Main workflow completes on mobile (375px viewport)
-- [ ] Loading state is visible during API call
-- [ ] Error state is visible when the API returns 4xx or 5xx
-- [ ] Evidence panel shows gaps explicitly when a field is missing
-- [ ] RunComparison renders metric diffs correctly with direction indicators
+- [ ] Main workflow completes on desktop (form submit → result render) (Pending Frontend)
+- [ ] Main workflow completes on mobile (375px viewport) (Pending Frontend)
+- [ ] Loading state is visible during API call (Pending Frontend)
+- [ ] Error state is visible when the API returns 4xx or 5xx (Pending Frontend)
+- [ ] Evidence panel shows gaps explicitly when a field is missing (Pending Frontend)
+- [ ] RunComparison renders metric diffs correctly with direction indicators (Pending Frontend)
 
 ---
 
 ## Environment Configuration
 
-- [ ] All environment variables are set in the Vercel dashboard (not in the repo)
-- [ ] `GROQ_API_KEY` is set and validated in Vercel → Project → Settings → Environment Variables
-- [ ] `GEMINI_API_KEY` is set and validated in Vercel → Project → Settings → Environment Variables
-- [ ] `NEXT_PUBLIC_APP_URL` is set to the production domain
-- [ ] Environment is set to **Production** (not Preview) for the release deployment
+- [x] All environment variables are set in the Vercel dashboard (not in the repo)
+- [x] `GROQ_API_KEY` is set and validated in Vercel → Project → Settings → Environment Variables
+- [x] `GEMINI_API_KEY` is set and validated in Vercel → Project → Settings → Environment Variables
+- [x] `NEXT_PUBLIC_APP_URL` is set to the production domain
+- [x] Environment is set to **Production** (not Preview) for the release deployment
 
 ---
 
@@ -77,15 +77,15 @@ Execute these against the live production URL:
 
 ## Documentation & Evidence
 
-- [ ] `README.md` is accurate and setup instructions work from a clean environment
-- [ ] `docs/architecture.md` reflects current module ownership and file structure
-- [ ] `docs/api-contracts.md` matches the live API behavior
-- [ ] `docs/known-gaps-and-limitations.md` is up to date
+- [x] `README.md` is accurate and setup instructions work from a clean environment
+- [x] `docs/architecture.md` reflects current module ownership and file structure
+- [x] `docs/api-contracts.md` matches the live API behavior
+- [x] `docs/known-gaps-and-limitations.md` is up to date
 - [ ] `docs/source-register.md` lists all sources used (Zein confirmed)
 - [ ] All `AI_USAGE.md` entries collected from every team member
 - [ ] Contribution matrix is complete (who wrote what)
 - [ ] 10-case evaluation report is complete (Zein confirmed)
-- [ ] Repository has a tagged release (e.g., `git tag v1.0.0`)
+- [x] Repository has a tagged release (e.g., `git tag v1.0.0`)
 
 ---
 
@@ -116,7 +116,7 @@ git push origin main --tags
 # 8. Record the production URL below
 ```
 
-**Production URL:** _(fill in after deployment)_
+**Production URL:** https://model-ops.vercel.app/modelops
 
 ---
 
