@@ -35,6 +35,10 @@ account of what ModelOps' real, merged rubric does and does not cover.
 - **No bias/fairness verification.** The system checks whether a
   bias/fairness test was *documented* — it does not verify the test was
   correct or sufficient.
+- **Frontend integration is API-only for Beta release.** Due to integration
+  scope limits, the current production deployment (v1.0.0) is an API-only Beta.
+  The React/Tailwind user interface component is complete but not yet
+  integrated into the live production application.
 
 ## 2. Prohibited Use Cases
 
