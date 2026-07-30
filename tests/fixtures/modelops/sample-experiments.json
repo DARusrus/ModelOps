@@ -1,0 +1,65 @@
+[
+  {
+    "id": "exp-001",
+    "model_name": "customer-churn-classifier",
+    "version": "1.0.0",
+    "dataset": "churn_data_v3.csv",
+    "input_shape": "(batch, 32)",
+    "data_types": ["float32", "int64"],
+    "metrics": { "accuracy": 0.91, "precision": 0.88, "recall": 0.85, "loss": 0.21 },
+    "intended_use": "Predict likelihood of customer churn to prioritize retention outreach.",
+    "warnings": ["Contains sensitive customer demographic fields."],
+    "limitations": ["Trained only on data from one region (North America)."],
+    "risks": ["May underperform for new customer segments not present in training data."],
+    "tests": ["unit test", "bias/fairness test"],
+    "reproducibility": "Trained with seed=42 using train.py v1.2, experiment tracker ID 4471.",
+    "expected_score": 100
+  },
+  {
+    "id": "exp-002",
+    "model_name": "customer-churn-classifier",
+    "version": "1.1.0",
+    "dataset": "churn_data_v4.csv",
+    "input_shape": "(batch, 34)",
+    "data_types": ["float32", "int64"],
+    "metrics": { "accuracy": 0.93, "precision": 0.90, "recall": 0.89, "loss": 0.17 },
+    "intended_use": "Predict likelihood of customer churn to prioritize retention outreach.",
+    "warnings": ["Contains sensitive customer demographic fields."],
+    "limitations": ["Trained on expanded dataset including EU region, but EU sample size still small."],
+    "risks": ["Slight performance drop observed for customers over age 65 in validation set."],
+    "tests": ["unit test", "integration test", "bias/fairness test"],
+    "reproducibility": "Trained with seed=42 using train.py v1.3, experiment tracker ID 4502.",
+    "expected_score": 100
+  },
+  {
+    "id": "exp-003",
+    "expected_score": 0
+  },
+  {
+    "id": "exp-004",
+    "model_name": "support-ticket-router",
+    "version": "2.0.0",
+    "dataset": "tickets_labeled_v2.csv",
+    "metrics": { "accuracy": 0.85, "f1": 0.83 },
+    "intended_use": "Automatically route incoming support tickets to the correct team.",
+    "limitations": ["Only supports English-language tickets."],
+    "risks": ["Misrouting risk for tickets containing multiple issue types."],
+    "tests": ["unit test"],
+    "expected_score": 70
+  },
+  {
+    "id": "exp-005",
+    "model_name": "sentiment-analyzer",
+    "version": "1.4.2",
+    "dataset": "product_reviews_2026.csv",
+    "input_shape": "(batch, 128)",
+    "data_types": ["float32"],
+    "metrics": { "accuracy": 0.89, "f1": 0.87, "loss": 0.25 },
+    "intended_use": "Classify product review sentiment as positive, neutral, or negative.",
+    "limitations": ["Struggles with sarcasm and mixed-sentiment reviews."],
+    "risks": ["Could misclassify sarcastic negative reviews as positive, skewing reports."],
+    "tests": ["unit test", "regression test"],
+    "reproducibility": "Trained with seed=123 using train.py v1.4, experiment tracker ID 4610.",
+    "expected_score": 95
+  }
+]
