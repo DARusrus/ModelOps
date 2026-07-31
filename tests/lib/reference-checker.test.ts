@@ -9,6 +9,9 @@ describe('isReferenceApproved', () => {
   it('rejects a URL that is not in the source register', () => {
     expect(isReferenceApproved('https://totally-made-up-source.example.com/paper')).toBe(false);
   });
+  it('approves an internal doc path that is in the source register', () => {
+    expect(isReferenceApproved('docs/model-card-template.md')).toBe(true);
+  });
 });
 
 describe('checkReferences', () => {
