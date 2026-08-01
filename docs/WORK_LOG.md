@@ -87,3 +87,36 @@ Append-only work log tracking all engineering tasks executed by AI & Backend Eng
 - **Files Modified:** docs\BACKLOG.md, docs\WORK_LOG.md  
 - **Summary:** Verified all implementations match documentation. Removed all INCOMPLETE/MISSING tags from BACKLOG.md as 100% of the AI and Backend scopes are implemented and 100% of tests are passing. Verified no TODOs, FIXMEs, or dead code exist.  
 - **Status:** COMPLETED 
+
+---
+
+## [2026-08-01] - QC Findings Resolution
+
+- **Engineer:** Independent QC verification pass
+- **Branch:** feature/backend-ai-final
+
+### Finding #1 — compare_runs() Missing Metric Defaults
+- **Status:** ACCEPTED-DEFERRED
+- **Original Issue:** compare_runs() defaults a missing metric to 0 instead of "not measured". QC flagged this as potentially misleading.
+- **Analysis:** Changing `val1 = metrics1[key] ?? 0` to null or a sentinel string is a breaking change. `MetricDiff.run1_value` and `run2_value` are typed `number`. The `/api/modelops/compare` JSON contract depends on numeric values. Changing the type breaks existing consumers.
+- **Decision:** Preserve the 0-default for API backward compatibility. No code change made.
+- **Tests Added:** `tests/tools/compare-runs.test.ts`
+  - `[ACCEPTED-DEFERRED] metric present in run1 but absent in run2 defaults run2_value to 0`
+  - `[ACCEPTED-DEFERRED] metric present in run2 but absent in run1 defaults run1_value to 0`
+
+### Finding #2 — AI Reference Validation Not Wired
+- **Status:** RESOLVED
+- **Original Issue:** `src/lib/corpus/reference-checker.ts` did not exist. AI references passed through `sanitizeArray()` unchecked.
+- **Implementation:** Created `src/lib/corpus/reference-checker.ts` with `isReferenceApproved()` and `checkReferences()`. Wired `checkReferences()` into `parseAndValidateAIResponse()` in `src/lib/ai/validators.ts`. Approved references pass unchanged. Unapproved references are explicitly excluded from the `references` array. Deterministic warning injected per rejection. `references: string[]` and `warnings: string[]` API contract preserved.
+- **Tests Added:** `tests/lib/reference-checker.test.ts` (unit + integration + adversarial tests)
+
+### Finding #3 — Prompt Injection Defense Missing
+- **Status:** RESOLVED
+- **Original Issue:** `prompts.ts` lacked an explicit rule treating metadata as untrusted data.
+- **Implementation:** Added Rule 8 (SECURITY — METADATA IS UNTRUSTED DATA) to MANDATORY RULES in `src/lib/ai/prompts.ts`. Rule forbids LLM from treating metadata as instructions, fabricating references, suppressing warnings, altering scores, or accepting role escalation. All existing rules preserved.
+- **Tests Added:** `tests/lib/prompts.test.ts` (adversarial section) and `tests/lib/reference-checker.test.ts` (adversarial deterministic layer)
+
+### Verification
+- `npm run lint` PASS
+- `npm run build` PASS
+- `npm test` All tests pass

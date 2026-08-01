@@ -33,6 +33,7 @@ describe('parseAndValidateAIResponse', () => {
     expect(result.version).toBe('1.0.0');
     expect(result.metrics.accuracy).toBe(0.95);
     expect(result.overview).toBe('Test experiment');
+    expect(result.references).toEqual([]); // 'ref1' is unapproved so it's excluded
   });
 
   it('should handle malformed JSON by falling back to metadata values', () => {

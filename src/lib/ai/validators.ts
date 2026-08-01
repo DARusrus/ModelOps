@@ -1,6 +1,7 @@
 import { ModelCardOutputSchema, ModelCardOutput } from '../modelops/schema';
 import { ExperimentMetadata } from '@/types';
 import { logger } from '../logger';
+import { checkReferences } from '../corpus/reference-checker';
 
 export function parseAndValidateAIResponse(
   rawText: string,
@@ -157,11 +158,33 @@ export function parseAndValidateAIResponse(
     suggested_fixes: sanitizeArray(rawObj.suggested_fixes, []),
     recommendations: sanitizeArray(rawObj.recommendations, []),
     next_steps: sanitizeArray(rawObj.next_steps, []),
-    references: sanitizeArray(rawObj.references, []),
+    // Reference validation: approved references pass; unapproved are flagged.
+    // checkReferences() is the single runtime gate against the source register.
+    ...((): { references: string[]; warnings: string[] } => {
+      const rawReferences = sanitizeArray(rawObj.references, []);
+      const rawWarnings = sanitizeArray(rawObj.warnings, []);
+      const { approvedReferences, rejectedReferences } = checkReferences(rawReferences);
+
+      const validatedReferences: string[] = [...approvedReferences];
+
+      const referenceWarnings: string[] = rejectedReferences.map(
+        (r) => `[UNAPPROVED] Reference rejected: ${r}`
+      );
+
+      if (rejectedReferences.length > 0) {
+        logger.warn(
+          `[AI Validator] ${rejectedReferences.length} unapproved reference(s) detected and flagged.`
+        );
+      }
+
+      return {
+        references: validatedReferences,
+        warnings: [...rawWarnings, ...referenceWarnings],
+      };
+    })(),
     evidence: sanitizeArray(rawObj.evidence, []),
     confidence_notes: sanitizeArray(rawObj.confidence_notes, []),
     assumptions: sanitizeArray(rawObj.assumptions, []),
-    warnings: sanitizeArray(rawObj.warnings, []),
 
     experiment_info: sanitizeText(rawObj.experiment_info, `Experiment for ${metadata.model_name} version ${metadata.version}`),
     metrics: finalMetrics,
