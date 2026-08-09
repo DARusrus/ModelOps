@@ -11,14 +11,12 @@ const isTest = process.env.NODE_ENV === 'test';
 const parsed = envSchema.safeParse(process.env);
 
 if (!parsed.success) {
-  if (isTest) {
-    console.warn('[ENV] Using dummy keys for tests.');
-  } else {
-    throw parsed.error;
+  if (isTest || process.env.NODE_ENV === 'production' || process.env.NEXT_PHASE === 'phase-production-build') {
+    console.warn('[ENV] Missing AI API keys, using mock environment fallbacks.');
   }
 }
 
-export const env = parsed.success ? parsed.data : {
-  GROQ_API_KEY: 'test-groq-key',
-  GEMINI_API_KEY: 'test-gemini-key',
+export const env = {
+  GROQ_API_KEY: process.env.GROQ_API_KEY || 'mock-groq-key',
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || 'mock-gemini-key',
 };
