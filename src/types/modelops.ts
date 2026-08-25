@@ -43,6 +43,14 @@ export interface MetricDefinition {
   threshold?: number;
 }
 
+export type FormValidationErrors = Record<string, string | undefined>;
+
+export interface MetricKeyValuePair {
+  id: string;
+  key: string;
+  value: string;
+}
+
 export interface ModelOpsInput {
   model_name: string;
   version: string;
@@ -153,6 +161,9 @@ export interface ModelCardOutput {
     generated_at?: string;
     provider?: string;
   };
+  evidence?: string[];
+  next_steps?: string[];
+  ai_analysis?: string;
   audit_trail?: GovernanceAuditEntry[];
 }
 

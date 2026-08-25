@@ -36,16 +36,23 @@ export function identifyModelGaps(card: ModelCardOutput | ModelOpsInput): Simula
   }
 
   // 2. Dataset
+  const rawCard = card as any;
+  const meta = ('metadata' in card && card.metadata) ? (card.metadata as any) : {};
+
   const hasDataset = Boolean(card.dataset && String(card.dataset).trim().length > 0);
   const hasInputShape = Boolean(
     (card.input_shape && card.input_shape !== 'Not specified') ||
-    card.data_split ||
-    card.eval_preprocessing
+    rawCard.data_split ||
+    meta.data_split ||
+    rawCard.eval_preprocessing ||
+    meta.eval_preprocessing
   );
   const hasDataTypes = Boolean(
     (Array.isArray(card.data_types) && card.data_types.length > 0) ||
-    card.training_dataset ||
-    card.data_volume
+    rawCard.training_dataset ||
+    meta.training_dataset ||
+    rawCard.data_volume ||
+    meta.data_volume
   );
 
   if (!hasDataset) {
@@ -110,14 +117,14 @@ export function identifyModelGaps(card: ModelCardOutput | ModelOpsInput): Simula
     ? card.risks.length
     : typeof card.risks === 'string' && card.risks.trim().length > 0
     ? 1
-    : card.risks_and_harms && String(card.risks_and_harms).trim().length > 0
+    : (rawCard.risks_and_harms || meta.risks_and_harms) && String(rawCard.risks_and_harms || meta.risks_and_harms).trim().length > 0
     ? 1
     : 0;
   const warningsCount = Array.isArray(card.warnings)
     ? card.warnings.length
     : typeof card.warnings === 'string' && card.warnings.trim().length > 0
     ? 1
-    : card.mitigations && String(card.mitigations).trim().length > 0
+    : (rawCard.mitigations || meta.mitigations) && String(rawCard.mitigations || meta.mitigations).trim().length > 0
     ? 1
     : 0;
 

@@ -4,6 +4,7 @@ import { processModelOpsRequest } from '@/lib/modelops/service';
 import { ZodError } from 'zod';
 import { isRateLimited } from '@/lib/rate-limit';
 import { logger } from '@/lib/logger';
+import { PreferredProvider } from '@/types/modelops';
 
 export async function POST(request: Request) {
   try {
@@ -33,7 +34,14 @@ export async function POST(request: Request) {
     // 2. Extract BYOK headers
     const groqApiKey = request.headers.get('x-groq-api-key') || undefined;
     const geminiApiKey = request.headers.get('x-gemini-api-key') || undefined;
-    const preferredProvider = request.headers.get('x-preferred-provider') || undefined;
+    const preferredProviderHeader = request.headers.get('x-preferred-provider');
+    const preferredProvider: PreferredProvider | undefined =
+      preferredProviderHeader === 'auto' ||
+      preferredProviderHeader === 'groq' ||
+      preferredProviderHeader === 'gemini' ||
+      preferredProviderHeader === 'offline'
+        ? preferredProviderHeader
+        : undefined;
 
     // 3. Pass to service orchestrator with user options
     const result = await processModelOpsRequest(validatedInput, {

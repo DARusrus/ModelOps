@@ -75,7 +75,7 @@ export const InputForm: React.FC<InputFormProps> = ({
   // Merge external errors
   useEffect(() => {
     if (externalErrors && Object.keys(externalErrors).length > 0) {
-      setErrors((prev) => ({ ...prev, ...externalErrors }));
+      setErrors((prev: FormValidationErrors) => ({ ...prev, ...externalErrors }));
     }
   }, [externalErrors]);
 
@@ -96,7 +96,7 @@ export const InputForm: React.FC<InputFormProps> = ({
       metrics.map((m) => (m.id === id ? { ...m, [field]: val } : m))
     );
     if (field === 'key' || field === 'value') {
-      setErrors((prev) => {
+      setErrors((prev: FormValidationErrors) => {
         if (!prev.metrics) return prev;
         const next = { ...prev };
         delete next.metrics;
@@ -105,8 +105,8 @@ export const InputForm: React.FC<InputFormProps> = ({
     }
   };
 
-  const clearFieldError = (field: keyof FormValidationErrors) => {
-    setErrors((prev) => {
+  const clearFieldError = (field: string) => {
+    setErrors((prev: FormValidationErrors) => {
       if (!prev[field]) return prev;
       const next = { ...prev };
       delete next[field];

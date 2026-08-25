@@ -83,3 +83,11 @@ export interface CompareRunsOutput {
   readiness_delta: number;
   summary: string[];
 }
+
+export interface ToolRuleViolation {
+  rule: string;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  field?: string;
+  rule_id?: string;
+}
