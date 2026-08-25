@@ -119,12 +119,20 @@ See [`docs/architecture.md`](docs/architecture.md) for the full system design in
 
 ---
 
-## API Reference
+---
 
-See [`docs/api-contracts.md`](docs/api-contracts.md) for full request/response examples for both endpoints:
+## Documentation Index
 
-- `POST /api/modelops` — generate model card
-- `POST /api/modelops/compare` — compare two experiment runs
+All detailed architecture, security, features, and engineering documentation are organized in the [`docs/`](docs/) directory:
+
+- 📖 **[All Features Guide (Plain Terms)](docs/all_features.md)** — Clear, user-friendly explanation of all platform capabilities.
+- 🛡️ **[Security, NIST AI RMF & Compliance Audit](docs/security_audit.md)** — Complete security analysis, threat modeling, Zod validation, and cryptographic audit signatures.
+- 🏛️ **[Software Engineering & Architecture Audit](docs/ARCHITECTURE_AUDIT.md)** — In-depth architectural review covering Clean Architecture, SOLID, and type safety.
+- 🎨 **[Frontend UI/UX Design System Log](docs/Frontend_new.md)** — Comprehensive documentation of design tokens, layout hierarchy, and the 5-tab interface.
+- 🚀 **[New Features & Backend Systems Guide](docs/New_features.md)** — Technical details on the BYOK AI Gateway, live WWIT simulator, multi-version timeline, and scoring engine.
+- 🎬 **[Demo & Defense Walkthrough Script](docs/DEMO_SCRIPT.md)** — Step-by-step presentation script for live evaluators.
+- 📐 **[System Architecture & Data Flows](docs/architecture.md)** — Component taxonomy, data journey, and provider fallback sequence.
+- 📜 **[API Contracts Specification](docs/api-contracts.md)** — Request/response schemas and HTTP error mappings.
 
 ---
 

@@ -19,7 +19,7 @@
 
 ### Visual Architecture Diagram
 
-![ModelOps Studio Security Architecture](./docs/assets/security_architecture_diagram.jpg)
+![ModelOps Studio Security Architecture](./assets/security_architecture_diagram.jpg)
 
 ---
 
