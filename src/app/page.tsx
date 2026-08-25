@@ -1,17 +1,23 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { ModelCardOutput, ModelOpsInput, UIState } from '@/types/modelops';
-import InputForm from '@/components/modelops/InputForm';
+import { ModelCardOutput, ModelOpsInput, UIState, UserApiKeys, PreferredProvider } from '@/types/modelops';
+import Navbar from '@/components/layout/Navbar';
+import Footer from '@/components/layout/Footer';
+import LandingHero from '@/components/modelops/LandingHero';
+import WizardForm from '@/components/modelops/WizardForm';
+import ResultView from '@/components/modelops/ResultView';
+import GovernanceInfoCard from '@/components/modelops/GovernanceInfoCard';
+import LandingFeatures from '@/components/modelops/LandingFeatures';
 import LoadingState from '@/components/common/LoadingState';
 import ErrorState from '@/components/common/ErrorState';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
-import ResultView from '@/components/modelops/ResultView';
+import ApiKeyModal from '@/components/modelops/ApiKeyModal';
+import { ModelTemplate } from '@/components/modelops/TemplateSelector';
 import { ResultViewSkeleton, RunComparisonSkeleton } from '@/components/modelops/Skeletons';
-import { Sparkles, RefreshCw, Layers, Lightbulb, SearchX, Scale } from 'lucide-react';
+import { Sparkles, RefreshCw, Layers, SearchX, Scale, ArrowLeft, RotateCcw, LayoutGrid, Key } from 'lucide-react';
 
-// Dynamic lazy loading for heavy components with skeleton loading fallbacks
 const RunComparison = dynamic(() => import('@/components/modelops/RunComparison'), {
   loading: () => <RunComparisonSkeleton />,
   ssr: false,
@@ -19,12 +25,11 @@ const RunComparison = dynamic(() => import('@/components/modelops/RunComparison'
 
 const ExportReport = dynamic(() => import('@/components/modelops/ExportReport'), {
   loading: () => (
-    <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 animate-pulse h-16" />
+    <div className="p-4 rounded bg-gray-100 border border-gray-200 animate-pulse h-16" />
   ),
   ssr: false,
 });
 
-// Default baseline run for initial comparison demonstration
 const baselineRun: ModelCardOutput = {
   model_name: 'ResNet50-Classifier-Baseline',
   version: 'v1.0.0',
@@ -36,15 +41,8 @@ const baselineRun: ModelCardOutput = {
   tests: ['Cross-Validation 5-Fold (Passed)', 'Latency SLA Benchmark (Passed)'],
   reproducibility: 'Deterministic seed 100. sha256:1a2b3c4d...',
   readiness_score: 72,
-  decision: 'REQUIRES_HUMAN_REVIEW',
+  decision: 'pending_human_review',
 };
-
-// NOTE: 'validation-error' is intentionally NOT rendered as a standalone
-// card in the result column anymore. Validation problems belong to specific
-// form fields, so they are surfaced inline inside <InputForm /> via the
-// `errors` prop, and the page state falls back to 'idle' once they're set.
-// Only genuine backend/provider failures (5xx, network errors) use the
-// full-width ErrorState card with a Retry action.
 
 export default function ModelOpsPage() {
   const [uiState, setUiState] = useState<UIState>('idle');
@@ -53,8 +51,99 @@ export default function ModelOpsPage() {
   const [result, setResult] = useState<ModelCardOutput | null>(null);
   const [lastInput, setLastInput] = useState<ModelOpsInput | null>(null);
   const [showComparison, setShowComparison] = useState<boolean>(false);
+  const [sessionHistory, setSessionHistory] = useState<ModelCardOutput[]>([]);
+  
+  // Initially null so wizard is only revealed after user clicks a template button
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
+  const [activeTemplateData, setActiveTemplateData] = useState<ModelOpsInput | null>(null);
+  const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
 
-  // Real fetch workflow calling /api/modelops
+  // Bring-Your-Own-Key (BYOK) State
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [userApiKeys, setUserApiKeys] = useState<UserApiKeys>({
+    preferredProvider: 'auto',
+  });
+
+  const formRef = useRef<HTMLDivElement>(null);
+  const compareRef = useRef<HTMLDivElement>(null);
+
+  // Load API keys from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('modelops_api_keys');
+      if (stored) {
+        setUserApiKeys(JSON.parse(stored));
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
+
+  const handleSaveApiKeys = (keys: UserApiKeys) => {
+    setUserApiKeys(keys);
+    try {
+      localStorage.setItem('modelops_api_keys', JSON.stringify(keys));
+    } catch {
+      // Ignore localStorage errors
+    }
+  };
+
+  const scrollToForm = () => {
+    setIsWizardOpen(true);
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  };
+
+  const scrollToCompare = () => {
+    setShowComparison(true);
+    setTimeout(() => {
+      compareRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
+  const handleSelectTemplate = (template: ModelTemplate) => {
+    setActiveTemplateId(template.id);
+    setActiveTemplateData(template.data);
+    setIsWizardOpen(true);
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 80);
+  };
+
+  const handleResetToLanding = () => {
+    setIsWizardOpen(false);
+    setActiveTemplateId(null);
+    setActiveTemplateData(null);
+    setResult(null);
+    setUiState('idle');
+  };
+
+  const handleApplyFixesFromSimulator = (simulatedCard: ModelCardOutput) => {
+    // Merge simulated fixes back into form input and switch to idle
+    const updatedInput: ModelOpsInput = {
+      model_name: simulatedCard.model_name,
+      version: simulatedCard.version,
+      dataset: simulatedCard.dataset,
+      intended_use: simulatedCard.intended_use,
+      metrics: simulatedCard.metrics,
+      limitations: simulatedCard.limitations,
+      risks: simulatedCard.risks,
+      tests: simulatedCard.tests,
+      warnings: simulatedCard.warnings,
+      reproducibility: simulatedCard.reproducibility,
+      mitigations: simulatedCard.metadata?.mitigations,
+      training_dataset: simulatedCard.metadata?.training_dataset,
+      eval_preprocessing: simulatedCard.metadata?.eval_preprocessing,
+    };
+
+    setActiveTemplateData(updatedInput);
+    setUiState('idle');
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  };
+
   const handleFormSubmit = async (input: ModelOpsInput, forceMode?: 'normal' | 'error' | 'empty') => {
     setLastInput(input);
     setUiState('loading');
@@ -70,6 +159,11 @@ export default function ModelOpsPage() {
       if (forceMode === 'error') headers['x-simulate-error'] = 'true';
       if (forceMode === 'empty') headers['x-simulate-empty'] = 'true';
 
+      // Attach user BYOK headers if provided
+      if (userApiKeys.groqApiKey) headers['x-groq-api-key'] = userApiKeys.groqApiKey;
+      if (userApiKeys.geminiApiKey) headers['x-gemini-api-key'] = userApiKeys.geminiApiKey;
+      if (userApiKeys.preferredProvider) headers['x-preferred-provider'] = userApiKeys.preferredProvider;
+
       const res = await fetch('/api/modelops', {
         method: 'POST',
         headers,
@@ -84,8 +178,6 @@ export default function ModelOpsPage() {
 
         const errorData = await res.json().catch(() => ({ error: 'Evaluation service error' }));
 
-        // 5xx = genuine backend/provider failure -> full error card + retry.
-        // 4xx (validation/schema) = belongs to the form, not a separate card.
         if (res.status >= 500) {
           setErrorMessage(errorData.error || `Server responded with status ${res.status}`);
           setUiState('provider-error');
@@ -101,6 +193,7 @@ export default function ModelOpsPage() {
 
       const data: ModelCardOutput = await res.json();
       setResult(data);
+      setSessionHistory((prev) => [data, ...prev]);
       setUiState('success');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Network error communicating with server.';
@@ -109,7 +202,6 @@ export default function ModelOpsPage() {
     }
   };
 
-  // Resubmit last form data without forcing user to re-enter inputs
   const handleRetry = () => {
     if (lastInput) {
       setUiState('retry');
@@ -121,32 +213,222 @@ export default function ModelOpsPage() {
 
   return (
     <ErrorBoundary fallbackTitle="ModelOps Portal Exception" fallbackMessage="An isolated error occurred while rendering the evaluation interface.">
-      <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-8 font-sans">
-        <div className="max-w-6xl mx-auto space-y-8">
+      <div className="min-h-screen flex flex-col bg-[#FAFAFA] text-gray-900 font-sans antialiased">
+        {/* Navigation Bar */}
+        <Navbar
+          onScrollToForm={scrollToForm}
+          onScrollToCompare={scrollToCompare}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          preferredProvider={userApiKeys.preferredProvider || 'auto'}
+        />
 
-          {/* Header */}
-          <header className="border-b border-slate-800 pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-blue-400 font-semibold text-xs uppercase tracking-widest mb-1">
-                <Sparkles className="w-4 h-4 text-blue-400" /> ModelOps Governance Engine
+        {/* Bring Your Own Key Modal */}
+        <ApiKeyModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          onSaveKeys={handleSaveApiKeys}
+          currentKeys={userApiKeys}
+        />
+
+        {/* Main Application Container */}
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pt-20 pb-16">
+          
+          {/* Outer White Card Container matching VerifyWise max-w-[1200px] frame */}
+          <div className="bg-white border border-gray-300 p-6 sm:p-12 shadow-xs rounded-md">
+            
+            {/* Landing Hero & 6 Template Cards */}
+            <LandingHero
+              activeTemplateId={activeTemplateId}
+              onSelectTemplate={handleSelectTemplate}
+            />
+
+            {/* Generator Wizard Section: ONLY appears when a template button is clicked! */}
+            {isWizardOpen && (
+              <div ref={formRef} className="pt-8 border-t border-gray-200 animate-fadeIn">
+                
+                {/* Header bar above the wizard with active template indicator and return link */}
+                <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-emerald-50/50 border border-emerald-200 rounded text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[#13715B]" />
+                    <span className="font-semibold text-gray-800">Active Template Configuration:</span>
+                    <span className="px-2 py-0.5 bg-white border border-emerald-300 rounded font-mono font-bold text-[#13715B] capitalize">
+                      {activeTemplateId ? activeTemplateId.replace('-', ' ') : 'Custom Model'}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleResetToLanding}
+                    className="inline-flex items-center gap-1 text-gray-600 hover:text-gray-900 font-medium underline underline-offset-4 cursor-pointer"
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    Change / Close Template
+                  </button>
+                </div>
+
+                {/* If result is NOT generated yet, show the 9-Step Wizard */}
+                {uiState !== 'success' && (
+                  <div className="space-y-6">
+                    <WizardForm
+                      initialData={activeTemplateData}
+                      onSubmit={(input) => handleFormSubmit(input, 'normal')}
+                      isLoading={uiState === 'loading' || uiState === 'retry'}
+                      errors={fieldErrors}
+                      onStartOver={handleResetToLanding}
+                    />
+
+                    {/* Quick Diagnostic Triggers for Evaluators */}
+                    <div className="p-4 rounded bg-gray-50 border border-gray-200 text-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                      <span className="text-gray-600 font-medium">Diagnostic Path Testing:</span>
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleFormSubmit(
+                              {
+                                model_name: 'Test-Model-Err',
+                                version: 'v1.0',
+                                dataset: 'TestDS',
+                                intended_use: 'Validation of error path handling in production',
+                                metrics: { accuracy: 0.8 },
+                              },
+                              'error'
+                            )
+                          }
+                          className="px-3 py-1.5 rounded bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors font-mono text-[11px] cursor-pointer"
+                        >
+                          Simulate Provider Error
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleFormSubmit(
+                              {
+                                model_name: 'Test-Model-Empty',
+                                version: 'v1.0',
+                                dataset: 'UnknownDS',
+                                intended_use: 'Validation of empty response path in production',
+                                metrics: { accuracy: 0.5 },
+                              },
+                              'empty'
+                            )
+                          }
+                          className="px-3 py-1.5 rounded bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors font-mono text-[11px] cursor-pointer"
+                        >
+                          Simulate Empty Result
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* State: LOADING or RETRY */}
+                {(uiState === 'loading' || uiState === 'retry') && (
+                  <div className="mt-8 space-y-4 animate-fadeIn">
+                    <LoadingState
+                      message={
+                        uiState === 'retry'
+                          ? 'Retrying evaluation pipeline request...'
+                          : 'Evaluating model artifacts, computing deterministic readiness rubric & generating structured model card...'
+                      }
+                    />
+                    <ResultViewSkeleton />
+                  </div>
+                )}
+
+                {/* State: PROVIDER-ERROR */}
+                {uiState === 'provider-error' && (
+                  <div className="mt-8">
+                    <ErrorState
+                      title="AI Provider / Network Failure"
+                      message={errorMessage || 'Evaluation service could not process the request.'}
+                      onRetry={handleRetry}
+                    />
+                  </div>
+                )}
+
+                {/* State: EMPTY */}
+                {uiState === 'empty' && (
+                  <div className="mt-8">
+                    <div role="status" className="p-8 rounded border border-amber-300 bg-amber-50/40 shadow-xs flex flex-col items-center text-center space-y-4 justify-center">
+                      <div className="p-3.5 rounded-full bg-amber-100 text-amber-700">
+                        <SearchX className="w-7 h-7" />
+                      </div>
+                      <div className="space-y-1 max-w-md">
+                        <h3 className="text-base font-bold text-gray-900">No Matching Model Artifacts Found</h3>
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          The evaluation query executed successfully, but no registered model benchmarks or dataset records matched your criteria.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setUiState('idle')}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded bg-amber-700 hover:bg-amber-800 text-white shadow-xs transition-colors cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Reset & Retry
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* State: SUCCESS (Render Full Dossier) */}
+                {uiState === 'success' && result && (
+                  <div className="space-y-8 animate-fadeIn">
+                    {/* Top Back / Edit Form Button */}
+                    <div className="flex items-center justify-between pb-2">
+                      <button
+                        type="button"
+                        onClick={() => setUiState('idle')}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#13715B] hover:text-[#0f5c49] bg-emerald-50 px-3 py-1.5 rounded border border-emerald-200 cursor-pointer transition-colors"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                        Edit Specifications / Back to Wizard
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleResetToLanding}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 cursor-pointer transition-colors"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Start New Evaluation
+                      </button>
+                    </div>
+
+                    {/* Rendered Model Card View with All 5 Intelligence Tabs */}
+                    <ResultView
+                      card={result}
+                      templateId={activeTemplateId}
+                      sessionHistory={sessionHistory}
+                      onNewEvaluation={() => setUiState('idle')}
+                      onApplyFixes={handleApplyFixesFromSimulator}
+                    />
+                  </div>
+                )}
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-                Model Readiness & Evaluation Portal
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                Automated structured model card generation, risk analysis, & human-in-the-loop release decision framework.
-              </p>
+            )}
+
+            {/* Educational Info Card */}
+            <div className="mt-12">
+              <GovernanceInfoCard />
             </div>
 
-            {/* Dev State Machine Toolbar */}
-            <div className="bg-slate-900 border border-slate-800 p-2.5 sm:p-3 rounded-xl flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs">
-              <span className="text-slate-400 font-medium flex items-center gap-1">
-                <Layers className="w-3.5 h-3.5 text-blue-400" /> State:
-              </span>
-              <span className="px-2 py-0.5 rounded font-mono bg-blue-950 text-blue-300 border border-blue-800 font-semibold">
+            {/* Landing Features, How It Works, and FAQ */}
+            <LandingFeatures />
+          </div>
+
+          {/* Dev State Machine Toolbar at Bottom */}
+          <div className="mt-8 p-3 bg-white border border-gray-200 rounded text-xs flex flex-wrap items-center justify-between gap-3 text-gray-600">
+            <div className="flex items-center gap-2">
+              <Layers className="w-3.5 h-3.5 text-[#13715B]" />
+              <span className="font-semibold text-gray-800">State Machine Debugger:</span>
+              <span className="px-2 py-0.5 rounded font-mono bg-emerald-50 text-[#13715B] border border-emerald-200 font-bold">
                 {uiState}
               </span>
-              <div className="h-4 w-px bg-slate-800 mx-1 hidden sm:block" />
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => {
@@ -154,36 +436,34 @@ export default function ModelOpsPage() {
                   setErrorMessage('');
                   setUiState('idle');
                 }}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 text-[11px] font-medium transition-colors cursor-pointer"
               >
                 Idle
               </button>
               <button
                 type="button"
                 onClick={() => setUiState('loading')}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 text-[11px] font-medium transition-colors cursor-pointer"
               >
                 Loading
               </button>
               <button
                 type="button"
                 onClick={() => setUiState('empty')}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 text-[11px] font-medium transition-colors cursor-pointer"
               >
                 Empty
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  // Validation errors now surface INLINE in the form, not as
-                  // a standalone card. The page state goes back to 'idle'.
                   setFieldErrors({
                     model_name: 'Must be alphanumeric (letters, numbers, - or _ only).',
                   });
                   setErrorMessage('');
                   setUiState('idle');
                 }}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 text-[11px] font-medium transition-colors cursor-pointer"
               >
                 Valid-Err
               </button>
@@ -194,182 +474,23 @@ export default function ModelOpsPage() {
                   setErrorMessage('Groq/Gemini AI provider quota exceeded (503 Service Unavailable).');
                   setUiState('provider-error');
                 }}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 text-[11px] font-medium transition-colors cursor-pointer"
               >
                 Prov-Err
               </button>
               <button
                 type="button"
                 onClick={() => setUiState('retry')}
-                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-slate-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-gray-700 text-[11px] font-medium transition-colors cursor-pointer"
               >
                 Retry
               </button>
             </div>
-          </header>
+          </div>
+        </main>
 
-          {/* Main Content Layout */}
-          <main className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Input Form Column */}
-            <div className="lg:col-span-5 space-y-4">
-              <InputForm
-                onSubmit={(input) => handleFormSubmit(input, 'normal')}
-                isLoading={uiState === 'loading' || uiState === 'retry'}
-                errors={fieldErrors}
-              />
-
-              {/* Quick Test API Triggers */}
-              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 text-xs space-y-2">
-                <p className="text-slate-400 font-medium">Quick API Test Triggers:</p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleFormSubmit(
-                        {
-                          model_name: 'Test-Model-Err',
-                          version: 'v1.0',
-                          dataset: 'TestDS',
-                          intended_use: 'Validation of error path handling',
-                          metrics: { acc: 0.8 },
-                        },
-                        'error'
-                      )
-                    }
-                    className="flex-1 px-3 py-1.5 rounded bg-red-950/60 text-red-300 border border-red-800/50 hover:bg-red-900/60 transition-colors font-mono text-[11px] focus:outline-none focus:ring-2 focus:ring-red-400 cursor-pointer"
-                  >
-                    Simulate Provider Error
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleFormSubmit(
-                        {
-                          model_name: 'Test-Model-Empty',
-                          version: 'v1.0',
-                          dataset: 'UnknownDS',
-                          intended_use: 'Validation of empty response path',
-                          metrics: { acc: 0.5 },
-                        },
-                        'empty'
-                      )
-                    }
-                    className="flex-1 px-3 py-1.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800/50 hover:bg-amber-900/60 transition-colors font-mono text-[11px] focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
-                  >
-                    Simulate Empty Result
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Result / Output Column */}
-            <div className="lg:col-span-7 space-y-6">
-              {/* State: IDLE */}
-              {uiState === 'idle' && (
-                <div className="p-8 rounded-2xl bg-slate-900/40 border border-dashed border-slate-800 flex flex-col items-center justify-center text-center min-h-[380px]">
-                  <div className="p-4 rounded-full bg-slate-800/60 text-slate-400 mb-4">
-                    <Sparkles className="w-8 h-8 text-blue-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-200">Ready for Evaluation</h3>
-                  <p className="text-sm text-slate-400 max-w-md mt-1">
-                    Fill in the experiment parameters on the left and click submit to trigger model evaluation and readiness scoring.
-                  </p>
-                </div>
-              )}
-
-              {/* State: LOADING or RETRY */}
-              {(uiState === 'loading' || uiState === 'retry') && (
-                <div className="space-y-4">
-                  <LoadingState
-                    message={
-                      uiState === 'retry'
-                        ? 'Retrying evaluation pipeline request...'
-                        : 'Evaluating model artifacts & generating structured model card...'
-                    }
-                  />
-                  <ResultViewSkeleton />
-                </div>
-              )}
-
-              {/* State: PROVIDER-ERROR only (genuine backend/network failure) */}
-              {uiState === 'provider-error' && (
-                <ErrorState
-                  title="AI Provider / Network Failure"
-                  message={errorMessage || 'Evaluation service could not process the request.'}
-                  onRetry={handleRetry}
-                />
-              )}
-
-              {/* State: EMPTY (Distinct, Actionable No-Match Render) */}
-              {uiState === 'empty' && (
-                <div role="status" className="p-6 sm:p-8 rounded-2xl bg-slate-900/80 border border-amber-500/30 backdrop-blur-md shadow-xl flex flex-col items-center text-center space-y-4 min-h-[380px] justify-center">
-                  <div className="p-3.5 rounded-2xl bg-amber-950/60 border border-amber-800/50 text-amber-400">
-                    <SearchX className="w-8 h-8" />
-                  </div>
-                  <div className="space-y-1.5 max-w-md">
-                    <h3 className="text-lg font-bold text-slate-100">No Matching Model Artifacts Found</h3>
-                    <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                      The evaluation query executed successfully, but no registered model benchmarks or dataset records matched your criteria.
-                    </p>
-                  </div>
-
-                  {/* Actionable Suggestions */}
-                  <div className="w-full max-w-md p-4 rounded-xl bg-slate-950 border border-slate-800 text-left space-y-2 text-xs">
-                    <span className="font-semibold text-amber-300 flex items-center gap-1.5 uppercase tracking-wider">
-                      <Lightbulb className="w-3.5 h-3.5 text-amber-400" /> Actionable Next Steps:
-                    </span>
-                    <ul className="space-y-1 text-slate-300 list-disc list-inside">
-                      <li>Verify the exact model name spelling and version tag format.</li>
-                      <li>Ensure the target dataset exists in the artifact registry.</li>
-                      <li>Submit a new experiment run specification using the form on the left.</li>
-                    </ul>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setUiState('idle')}
-                    className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl bg-amber-600 hover:bg-amber-500 text-white shadow-lg transition-colors focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Reset & Retry Search
-                  </button>
-                </div>
-              )}
-
-              {/* State: SUCCESS */}
-              {uiState === 'success' && result && (
-                <div className="space-y-6">
-                  {/* Result Card Render */}
-                  <ResultView card={result} />
-
-                  {/* Compare Runs & Export Report Actions */}
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-xl bg-slate-900 border border-slate-800">
-                    <button
-                      type="button"
-                      onClick={() => setShowComparison(!showComparison)}
-                      className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold shadow transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                    >
-                      <Scale className="w-4 h-4 text-blue-400" />
-                      {showComparison ? 'Hide Run Comparison' : 'Compare with Baseline Run (Side-by-Side)'}
-                    </button>
-                  </div>
-
-                  {/* Side-by-Side Run Comparison View (Lazy Loaded) */}
-                  {showComparison && (
-                    <RunComparison
-                      run1={baselineRun}
-                      run2={result}
-                      onClose={() => setShowComparison(false)}
-                    />
-                  )}
-
-                  {/* Export Report Component (Lazy Loaded) */}
-                  <ExportReport card={result} />
-                </div>
-              )}
-            </div>
-          </main>
-        </div>
+        {/* Enterprise Footer */}
+        <Footer />
       </div>
     </ErrorBoundary>
   );

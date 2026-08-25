@@ -13,11 +13,35 @@ export interface ExperimentMetadata {
   risks?: string[];
   tests?: string[];
   reproducibility?: string;
+  // 9-section extended metadata
+  model_type?: string;
+  architecture?: string;
+  developed_by?: string;
+  release_date?: string;
+  license?: string;
+  primary_uses?: string;
+  out_of_scope_uses?: string;
+  target_users?: string;
+  factors?: string;
+  environment?: string;
+  decision_thresholds?: string;
+  variation_approaches?: string;
+  eval_preprocessing?: string;
+  data_split?: string;
+  training_dataset?: string;
+  data_volume?: string;
+  disaggregated_results?: string;
+  subgroup_benchmarks?: string;
+  uses_sensitive_data?: boolean;
+  impacts_human_life?: boolean;
+  risks_and_harms?: string;
+  mitigations?: string;
+  recommendations?: string;
 }
 
 export interface AIProviderResponse {
   raw_text: string;
-  provider: 'groq' | 'gemini';
+  provider: 'groq' | 'gemini' | 'offline';
   latency_ms: number;
 }
 
@@ -58,11 +82,4 @@ export interface CompareRunsOutput {
   readiness_score_2: number;
   readiness_delta: number;
   summary: string[];
-}
-
-/** Standard API error response shape used by createErrorResponse() */
-export interface APIErrorResponse {
-  success: false;
-  error: string;
-  details?: { path: string; message: string }[];
 }

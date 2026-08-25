@@ -1,24 +1,49 @@
-import { ModelCardOutput } from './schema';
-import { ReadinessScoreResult, CompareRunsOutput, MetricDiff } from '@/types';
+import {
+  ReadinessScoreResult,
+  CompareRunsOutput,
+  MetricDiff,
+  ToolRuleViolation,
+} from '@/types';
 
 /**
- * Calculates a deterministic readiness score (0-100) for a model card based on completeness,
- * metrics presence, risk disclosures, test coverage, and documentation quality.
+ * Calculates a deterministic model readiness score (0-100) based on documentation completeness.
  */
-export function readiness_score(data: Partial<ModelCardOutput>): number {
+export function readiness_score(data: any): number {
   return readiness_score_detail(data).score;
 }
 
 /**
  * Detailed readiness score calculation returning breakdown and justifications.
  */
-export function readiness_score_detail(data: Partial<ModelCardOutput>): ReadinessScoreResult {
+export function readiness_score_detail(data: any): ReadinessScoreResult {
+  if (!data || typeof data !== 'object') {
+    return {
+      score: 0,
+      breakdown: {
+        identification: 0,
+        dataset: 0,
+        metrics: 0,
+        governance: 0,
+        testing: 0,
+      },
+      justification: [
+        {
+          criteria: 'Empty',
+          points: 0,
+          max_points: 100,
+          passed: false,
+          reason: 'No valid data provided',
+        },
+      ],
+    };
+  }
+
   const justifications: ReadinessScoreResult['justification'] = [];
   const breakdown: Record<string, number> = {};
 
   // 1. Model Identification (Max 10 pts)
-  const hasName = Boolean(data.model_name && data.model_name.trim().length > 0);
-  const hasVersion = Boolean(data.version && data.version.trim().length > 0);
+  const hasName = Boolean(data.model_name && String(data.model_name).trim().length > 0);
+  const hasVersion = Boolean(data.version && String(data.version).trim().length > 0);
   const idPoints = (hasName ? 5 : 0) + (hasVersion ? 5 : 0);
   breakdown['identification'] = idPoints;
   justifications.push({
@@ -30,9 +55,17 @@ export function readiness_score_detail(data: Partial<ModelCardOutput>): Readines
   });
 
   // 2. Dataset Documentation (Max 15 pts)
-  const hasDataset = Boolean(data.dataset && data.dataset.trim().length > 0);
-  const hasInputShape = Boolean(data.input_shape && data.input_shape !== 'Not specified');
-  const hasDataTypes = Boolean(data.data_types && data.data_types.length > 0);
+  const hasDataset = Boolean(data.dataset && String(data.dataset).trim().length > 0);
+  const hasInputShape = Boolean(
+    (data.input_shape && data.input_shape !== 'Not specified') ||
+    data.data_split ||
+    data.eval_preprocessing
+  );
+  const hasDataTypes = Boolean(
+    (Array.isArray(data.data_types) && data.data_types.length > 0) ||
+    data.training_dataset ||
+    data.data_volume
+  );
   const datasetPoints = (hasDataset ? 7 : 0) + (hasInputShape ? 4 : 0) + (hasDataTypes ? 4 : 0);
   breakdown['dataset'] = datasetPoints;
   justifications.push({
@@ -59,9 +92,28 @@ export function readiness_score_detail(data: Partial<ModelCardOutput>): Readines
   });
 
   // 4. Governance & Risk Management (Max 25 pts)
-  const limitationsCount = data.limitations ? data.limitations.length : 0;
-  const risksCount = data.risks ? data.risks.length : 0;
-  const warningsCount = data.warnings ? data.warnings.length : 0;
+  const limitationsCount = Array.isArray(data.limitations)
+    ? data.limitations.length
+    : typeof data.limitations === 'string' && data.limitations.trim().length > 0
+    ? 1
+    : 0;
+
+  const risksCount = Array.isArray(data.risks)
+    ? data.risks.length
+    : typeof data.risks === 'string' && data.risks.trim().length > 0
+    ? 1
+    : data.risks_and_harms && String(data.risks_and_harms).trim().length > 0
+    ? 1
+    : 0;
+
+  const warningsCount = Array.isArray(data.warnings)
+    ? data.warnings.length
+    : typeof data.warnings === 'string' && data.warnings.trim().length > 0
+    ? 1
+    : data.mitigations && String(data.mitigations).trim().length > 0
+    ? 1
+    : 0;
+
   const govPoints = Math.min(25, (limitationsCount > 0 ? 10 : 0) + (risksCount > 0 ? 10 : 0) + (warningsCount > 0 ? 5 : 0));
   breakdown['governance'] = govPoints;
   justifications.push({
@@ -69,14 +121,26 @@ export function readiness_score_detail(data: Partial<ModelCardOutput>): Readines
     points: govPoints,
     max_points: 25,
     passed: govPoints >= 20,
-    reason: `Documented ${limitationsCount} limitations and ${risksCount} risks.`,
+    reason: `Documented ${limitationsCount} limitations, ${risksCount} risks, and ${warningsCount} warnings/mitigations.`,
   });
 
   // 5. Verification & Testing (Max 25 pts)
-  const testsCount = data.tests ? data.tests.length : 0;
-  const reproducibilityDefaults = ['Standard execution pipeline', 'Standard pipeline execution'];
+  const testsCount = Array.isArray(data.tests)
+    ? data.tests.length
+    : typeof data.tests === 'string' && data.tests.trim().length > 0
+    ? 1
+    : 0;
+
+  const reproducibilityDefaults = [
+    'Standard execution pipeline',
+    'Standard pipeline execution',
+    'default',
+    'none',
+    'n/a',
+  ];
   const hasReproducibility = Boolean(
     data.reproducibility &&
+    typeof data.reproducibility === 'string' &&
     data.reproducibility.trim().length > 0 &&
     !reproducibilityDefaults.includes(data.reproducibility.trim())
   );
@@ -103,16 +167,16 @@ export function readiness_score_detail(data: Partial<ModelCardOutput>): Readines
  * Deterministically compares two experiment runs and returns structured diffs.
  */
 export function compare_runs(
-  run1: Partial<ModelCardOutput>,
-  run2: Partial<ModelCardOutput>
+  run1: any,
+  run2: any
 ): CompareRunsOutput {
-  const name1 = run1.model_name || 'Run 1';
-  const ver1 = run1.version || '1.0.0';
-  const name2 = run2.model_name || 'Run 2';
-  const ver2 = run2.version || '2.0.0';
+  const name1 = run1?.model_name || 'Run 1';
+  const ver1 = run1?.version || '1.0.0';
+  const name2 = run2?.model_name || 'Run 2';
+  const ver2 = run2?.version || '2.0.0';
 
-  const metrics1 = run1.metrics || {};
-  const metrics2 = run2.metrics || {};
+  const metrics1 = run1?.metrics || {};
+  const metrics2 = run2?.metrics || {};
   const allMetricKeys = Array.from(new Set([...Object.keys(metrics1), ...Object.keys(metrics2)]));
 
   const metricsDiff: MetricDiff[] = allMetricKeys.map((key) => {
@@ -175,4 +239,45 @@ export function compare_runs(
     readiness_delta: readinessDelta,
     summary,
   };
+}
+
+/**
+ * Validates tool rule compliance.
+ */
+export function check_rules(card: any): ToolRuleViolation[] {
+  const violations: ToolRuleViolation[] = [];
+
+  if (!card?.model_name) {
+    violations.push({
+      rule: 'model_name_required',
+      severity: 'error',
+      message: 'Model name is required for all model cards.',
+    });
+  }
+
+  if (!card?.version) {
+    violations.push({
+      rule: 'version_required',
+      severity: 'error',
+      message: 'Model version is required.',
+    });
+  }
+
+  if (!card?.metrics || Object.keys(card.metrics).length === 0) {
+    violations.push({
+      rule: 'metrics_required',
+      severity: 'warning',
+      message: 'At least one quantitative evaluation metric should be provided.',
+    });
+  }
+
+  if (!card?.intended_use) {
+    violations.push({
+      rule: 'intended_use_required',
+      severity: 'warning',
+      message: 'Intended use description is recommended for governance transparency.',
+    });
+  }
+
+  return violations;
 }

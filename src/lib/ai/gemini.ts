@@ -1,111 +1,94 @@
-import { AIProviderResponse } from '@/types';
-import { AIProviderErrorClass } from '../errors';
-import { logger } from '../logger';
-import { env } from '../env';
+import { AIProviderResponse, AIProviderErrorClass } from '@/types/modelops';
+import { env } from '@/lib/env';
 
-const DEFAULT_GEMINI_MODEL = 'gemini-1.5-flash';
-const DEFAULT_TIMEOUT_MS = 30000;
-const MAX_RETRIES = 1;
-const RETRY_BASE_DELAY_MS = 1000;
-
-/** Returns true for HTTP status codes that warrant a retry */
-function isRetryableStatus(status: number): boolean {
-  return status === 429 || status === 503 || status >= 500;
-}
+const GEMINI_API_URL =
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const MAX_RETRIES = 2;
+const BASE_RETRY_DELAY_MS = 300;
 
 export async function generateGeminiResponse(
   prompt: string,
-  timeoutMs: number = DEFAULT_TIMEOUT_MS
+  customApiKey?: string
 ): Promise<AIProviderResponse> {
-  const apiKey = env.GEMINI_API_KEY;
+  const apiKey = customApiKey || env.GEMINI_API_KEY;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${DEFAULT_GEMINI_MODEL}:generateContent`;
-  let lastError: AIProviderErrorClass | null = null;
+  if (!apiKey) {
+    throw new AIProviderErrorClass('gemini', 'No Gemini API key configured', 401);
+  }
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    if (attempt > 0) {
-      const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
-      logger.info(`[Gemini] Retry attempt ${attempt} after ${delay}ms delay...`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
+  let attempt = 0;
+  let lastError: unknown = null;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const startTime = Date.now();
-
+  while (attempt <= MAX_RETRIES) {
     try {
-      const response = await fetch(url, {
+      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
         },
         body: JSON.stringify({
           contents: [
             {
-              parts: [{ text: prompt }],
+              parts: [
+                {
+                  text: `${prompt}\n\nCRITICAL: Respond ONLY with valid, parseable JSON. Do not include markdown code block formatting or backticks.`,
+                },
+              ],
             },
           ],
           generationConfig: {
             temperature: 0.1,
+            maxOutputTokens: 1500,
             responseMimeType: 'application/json',
           },
         }),
-        signal: controller.signal,
       });
 
-      clearTimeout(timer);
-      const latency_ms = Date.now() - startTime;
-
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        lastError = new AIProviderErrorClass(
+        const errorText = await response.text().catch(() => 'Unknown error');
+        const status = response.status;
+        const isRetryable = status === 429 || status >= 500;
+
+        const providerErr = new AIProviderErrorClass(
           'gemini',
-          `Gemini API returned ${response.status}: ${errorData.error?.message || 'Unknown error'}`,
-          response.status
+          `Gemini API failed with status ${status}: ${errorText}`,
+          status
         );
 
-        // Retry on transient errors only
-        if (isRetryableStatus(response.status) && attempt < MAX_RETRIES) {
-          logger.warn(`[Gemini] Retryable error (${response.status}). Will retry.`);
+        if (isRetryable && attempt < MAX_RETRIES) {
+          attempt++;
+          const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+          await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
-        throw lastError;
+
+        throw providerErr;
       }
 
       const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
       if (!text) {
-        throw new AIProviderErrorClass('gemini', 'Gemini returned an empty text payload.');
+        throw new AIProviderErrorClass('gemini', 'Received empty text payload from Gemini API response', 500);
       }
 
       return {
-        raw_text: text,
         provider: 'gemini',
-        latency_ms,
+        model_name: 'gemini-1.5-flash',
+        raw_text: text,
       };
-    } catch (error: unknown) {
-      clearTimeout(timer);
-      if (error instanceof AIProviderErrorClass) {
-        if (error.status_code && isRetryableStatus(error.status_code) && attempt < MAX_RETRIES) {
-          lastError = error;
-          continue;
-        }
-        throw error;
+    } catch (err: unknown) {
+      lastError = err;
+      if (err instanceof AIProviderErrorClass) {
+        throw err;
       }
-      
-      const isTimeout = error instanceof Error && error.name === 'AbortError';
-      lastError = new AIProviderErrorClass(
-        'gemini',
-        isTimeout ? `Gemini request timed out after ${timeoutMs}ms` : (error instanceof Error ? error.message : 'Unknown Gemini error occurred'),
-        undefined,
-        isTimeout
-      );
-      throw lastError;
+      break;
     }
   }
 
-  // Fallthrough: all retries exhausted
-  throw lastError || new AIProviderErrorClass('gemini', 'Gemini request failed after all retries.');
+  throw new AIProviderErrorClass(
+    'gemini',
+    lastError instanceof Error ? lastError.message : 'Unknown Gemini API failure',
+    500
+  );
 }

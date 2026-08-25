@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ModelCardOutput } from '@/types/modelops';
+import { Download, Copy, Check, Printer, FileText, X, ShieldCheck } from 'lucide-react';
 
 interface ExportReportProps {
   modelCard?: ModelCardOutput;
@@ -78,19 +79,20 @@ ${activeCard.reproducibility}
   return (
     <section
       aria-label="Export Governance Model Card Report"
-      className="bg-slate-900/95 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 animate-fade-in text-slate-100"
+      className="bg-white border border-gray-300 rounded-md p-6 sm:p-8 shadow-xs space-y-6 text-gray-900 animate-fadeIn"
     >
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 bg-indigo-950 text-indigo-400 border border-indigo-800 rounded-full text-[11px] font-bold uppercase tracking-widest font-mono">
-              EXPORT & AUDIT REPORT
+            <span className="px-2.5 py-0.5 bg-emerald-50 text-[#13715B] border border-emerald-200 rounded text-[11px] font-bold uppercase tracking-wider font-mono">
+              Export & Compliance Dossier
             </span>
-            <span className="text-xs text-slate-400 font-mono">Governance Artifact</span>
+            <span className="text-xs text-gray-500 font-mono">Audit Artifact</span>
           </div>
-          <h3 className="text-2xl font-extrabold text-white tracking-tight">
-            Export Model Card & Compliance Record
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
+            <Download className="w-5 h-5 text-[#13715B]" />
+            Export Model Card & Governance Report
           </h3>
         </div>
 
@@ -99,75 +101,57 @@ ${activeCard.reproducibility}
             type="button"
             onClick={onClose}
             aria-label="Close Export Panel"
-            className="self-start sm:self-auto px-3.5 py-2 bg-slate-800 hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none text-xs font-semibold rounded-xl text-slate-300 transition-all cursor-pointer"
+            className="self-start sm:self-auto px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-xs font-semibold rounded text-gray-700 transition-colors flex items-center gap-1 cursor-pointer"
           >
-            ✕ Close
+            <X className="w-3.5 h-3.5" />
+            Close Export
           </button>
         )}
       </div>
 
-      {/* Export Action Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Download JSON */}
+      <p className="text-xs text-gray-600 leading-relaxed">
+        Download structured metadata dossiers for integration into enterprise model registries, compliance archives, or regulatory filings (EU AI Act Technical Documentation, NIST AI RMF).
+      </p>
+
+      {/* Action Buttons Toolbar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <button
           type="button"
           onClick={handleDownloadJSON}
-          className="p-5 bg-slate-950 hover:bg-indigo-950/40 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left transition-all space-y-2 cursor-pointer group focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+          className="p-3.5 rounded border border-[#13715B] bg-[#13715B] hover:bg-[#0f5c49] text-white flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-xs cursor-pointer"
         >
-          <div className="w-10 h-10 bg-indigo-950 border border-indigo-800 rounded-lg flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-          </div>
-          <h4 className="text-sm font-bold text-white">Download JSON Schema</h4>
-          <p className="text-xs text-slate-400">Structured JSON model card matching backend output contract.</p>
+          <Download className="w-4 h-4" />
+          <span>Download JSON Dossier</span>
         </button>
 
-        {/* Copy Markdown */}
         <button
           type="button"
           onClick={handleCopyMarkdown}
-          className="p-5 bg-slate-950 hover:bg-indigo-950/40 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left transition-all space-y-2 cursor-pointer group focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+          className="p-3.5 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-800 flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-2xs cursor-pointer"
         >
-          <div className="w-10 h-10 bg-indigo-950 border border-indigo-800 rounded-lg flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <h4 className="text-sm font-bold text-white">
-            {copied ? '✓ Copied to Clipboard!' : 'Copy Markdown Summary'}
-          </h4>
-          <p className="text-xs text-slate-400">Copy formatted Markdown document for documentation & PR descriptions.</p>
+          {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-gray-500" />}
+          <span>{copied ? 'Markdown Copied!' : 'Copy Markdown Report'}</span>
         </button>
 
-        {/* Print PDF */}
         <button
           type="button"
           onClick={handlePrint}
-          className="p-5 bg-slate-950 hover:bg-indigo-950/40 border border-slate-800 hover:border-indigo-500/50 rounded-xl text-left transition-all space-y-2 cursor-pointer group focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:outline-none"
+          className="p-3.5 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-800 flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-2xs cursor-pointer"
         >
-          <div className="w-10 h-10 bg-indigo-950 border border-indigo-800 rounded-lg flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-            </svg>
-          </div>
-          <h4 className="text-sm font-bold text-white">Print / Export PDF</h4>
-          <p className="text-xs text-slate-400">Print or save as PDF formatted governance compliance report.</p>
+          <Printer className="w-4 h-4 text-gray-500" />
+          <span>Print / Save as PDF</span>
         </button>
       </div>
 
-      {/* Markdown Preview Area */}
-      <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
-          Markdown Report Preview
+      {/* Markdown Document Preview Box */}
+      <div className="space-y-2">
+        <span className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+          <FileText className="w-3.5 h-3.5 text-[#13715B]" />
+          Governance Report Preview (Markdown)
         </span>
-        <textarea
-          readOnly
-          rows={6}
-          value={generateMarkdownReport()}
-          aria-label="Markdown Report Preview Text"
-          className="w-full p-3 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-slate-300 focus:outline-none resize-none"
-        />
+        <pre className="p-4 rounded bg-gray-50 border border-gray-200 text-gray-800 text-xs font-mono overflow-x-auto max-h-64 leading-relaxed whitespace-pre-wrap">
+          {generateMarkdownReport()}
+        </pre>
       </div>
     </section>
   );

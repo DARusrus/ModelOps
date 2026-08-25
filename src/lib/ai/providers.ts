@@ -1,35 +1,56 @@
+import { AIProviderResponse, AIProviderErrorClass, PreferredProvider } from '@/types/modelops';
 import { generateGroqResponse } from './groq';
 import { generateGeminiResponse } from './gemini';
-import { AIProviderResponse } from '@/types';
-import { AIProviderErrorClass } from '../errors';
-import { logger } from '../logger';
 
-export async function generateWithFallback(prompt: string): Promise<AIProviderResponse> {
-  let groqError: AIProviderErrorClass | null = null;
+export interface GenerateOptions {
+  preferredProvider?: PreferredProvider;
+  groqApiKey?: string;
+  geminiApiKey?: string;
+}
 
-  // Primary: Groq
-  try {
-    logger.info('[AI Provider] Attempting Primary Provider: Groq...');
-    const result = await generateGroqResponse(prompt);
-    logger.info(`[AI Provider] Groq succeeded in ${result.latency_ms}ms.`);
-    return result;
-  } catch (error) {
-    groqError = error instanceof AIProviderErrorClass ? error : new AIProviderErrorClass('groq', String(error));
-    logger.warn(`[AI Provider] Groq Primary Provider failed. Falling back to Gemini...`);
+export async function generateWithFallback(
+  prompt: string,
+  options?: GenerateOptions
+): Promise<AIProviderResponse> {
+  const preferred = options?.preferredProvider || 'auto';
+
+  // 1. Explicit Groq preference
+  if (preferred === 'groq') {
+    return options?.groqApiKey
+      ? generateGroqResponse(prompt, options.groqApiKey)
+      : generateGroqResponse(prompt);
   }
 
-  // Fallback: Gemini
-  try {
-    logger.info('[AI Provider] Attempting Fallback Provider: Gemini...');
-    const result = await generateGeminiResponse(prompt);
-    logger.info(`[AI Provider] Gemini succeeded in ${result.latency_ms}ms.`);
-    return result;
-  } catch (error) {
-    logger.error(`[AI Provider] Gemini Fallback Provider failed.`);
+  // 2. Explicit Gemini preference
+  if (preferred === 'gemini') {
+    return options?.geminiApiKey
+      ? generateGeminiResponse(prompt, options.geminiApiKey)
+      : generateGeminiResponse(prompt);
+  }
 
-    throw new AIProviderErrorClass(
-      'gemini',
-      `All AI Providers Failed due to upstream service errors.`
-    );
+  // 3. Explicit Offline Synthesizer preference
+  if (preferred === 'offline') {
+    throw new AIProviderErrorClass('offline', 'Offline synthesizer mode requested', 200);
+  }
+
+  // 4. Auto failover (Groq -> Gemini)
+  try {
+    return options?.groqApiKey
+      ? await generateGroqResponse(prompt, options.groqApiKey)
+      : await generateGroqResponse(prompt);
+  } catch (groqError: unknown) {
+    try {
+      return options?.geminiApiKey
+        ? await generateGeminiResponse(prompt, options.geminiApiKey)
+        : await generateGeminiResponse(prompt);
+    } catch (geminiError: unknown) {
+      throw new Error(
+        `All AI Providers Failed: Groq (${
+          groqError instanceof Error ? groqError.message : 'Unknown'
+        }), Gemini (${
+          geminiError instanceof Error ? geminiError.message : 'Unknown'
+        })`
+      );
+    }
   }
 }
