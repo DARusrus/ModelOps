@@ -26,7 +26,7 @@ Closes #<!-- issue number -->
 <!-- Which module does this PR touch? -->
 
 - [ ] Architecture / Integration (Ahmed)
-- [ ] API route / AI providers / schema / service (Moamen)
+- [ ] API route / AI providers / schema / service (Haneen Abdelghany)
 - [ ] UI / components / pages (Mohamed)
 - [ ] Deterministic tools / corpus / evaluation (Zein)
 
