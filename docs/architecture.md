@@ -56,7 +56,7 @@ graph TD
 | Module | Owner | Boundary |
 |--------|-------|----------|
 | Architecture, contracts, integration, deployment | **Ahmed Amir Rusrus** | Everything that connects the parts. Reviews all PRs before merge. |
-| API route, validation, AI providers, schema, service | **Moamen Elkholy** | Server-side only. No secret reaches the client. |
+| API route, validation, AI providers, schema, service | **Haneen Abdelghany** | Server-side only. No secret reaches the client. |
 | UI pages, form, result render, all UI states | **Mohamed Said Mohamed Barakat** | Works against real API contract — not mocks-only in critical path. |
 | Deterministic tools, knowledge corpus, eval cases | **Zein ElDin Mohamed Farouk** | `readiness_score()` and `compare_runs()` are pure functions — no AI logic inside them. |
 

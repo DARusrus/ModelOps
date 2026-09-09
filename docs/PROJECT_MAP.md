@@ -1499,7 +1499,7 @@ graph TD
 * **Contents & Structure:**
   * Project overview: Lightweight ML governance workspace for research labs and AI engineering teams.
   * 6-step production workflow diagram.
-  * Team 11 roster (Ahmed Amir Rusrus, Moamen Elkholy, Mohamed Said Mohamed Barakat, Zein ElDin Mohamed Farouk).
+  * Team 11 roster (Ahmed Amir Rusrus, Haneen Abdelghany, Mohamed Said Mohamed Barakat, Zein ElDin Mohamed Farouk).
   * Tech stack overview (Next.js 15, Groq, Gemini, Zod, Vitest, Tailwind, Vercel).
   * Step-by-step local setup and environment configuration.
   * Command reference (`npm run dev`, `npm run build`, `npm test`, `npm run lint`).
@@ -1537,7 +1537,7 @@ graph TD
 * **Contents & Structure:**
   * Maps every single file in the repository to its owning team member:
     * **Ahmed Amir Rusrus (Integration Lead / Solution Architect):** CI/CD pipeline, architecture, contracts, release gates, smoke tests, Vercel deployments, E2E tests.
-    * **Moamen Elkholy (AI & Backend Engineer):** API routes, AI providers, prompt engineering, Zod schemas, service orchestrator, LRU cache.
+    * **Haneen Abdelghany (AI & Backend Engineer):** API routes, AI providers, prompt engineering, Zod schemas, service orchestrator, LRU cache.
     * **Mohamed Said Mohamed Barakat (Product UI & Workflow Engineer):** Next.js UI pages, `InputForm`, `ResultView`, `EvidencePanel`, `RunComparison`, `ExportReport`, loading/error states.
     * **Zein ElDin Mohamed Farouk (Knowledge, Tools & Quality Engineer):** Deterministic tools (`readiness_score`, `compare_runs`), scoring rules, domain taxonomy, evaluation test cases, test fixtures.
 

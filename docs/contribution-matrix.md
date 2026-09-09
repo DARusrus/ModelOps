@@ -29,7 +29,7 @@ by every member. Every row is traceable to a real file in the repository.
 
 ---
 
-## Moamen Elkholy — AI & Backend Engineer
+## Haneen Abdelghany — AI & Backend Engineer
 
 | Artifact | Type | Description |
 |----------|------|-------------|
