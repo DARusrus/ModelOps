@@ -36,6 +36,13 @@ function Get-HeaderValue([System.Net.Http.HttpResponseMessage]$response, [string
   return $null
 }
 
+function Describe-Redirect([System.Net.Http.HttpResponseMessage]$response) {
+  $location = Get-HeaderValue $response 'Location'
+  if (-not [string]::IsNullOrWhiteSpace($location)) {
+    Write-Host "INFO  Redirect destination: $location" -ForegroundColor Yellow
+  }
+}
+
 try {
   if ($UseVercelProtectionBypass) {
     $bypassSecret = Read-Host 'Paste the Vercel Protection Bypass for Automation secret (input is hidden)' -AsSecureString
@@ -55,12 +62,14 @@ try {
     }
   } else {
     Check $false "Health endpoint returned HTTP $([int]$health.StatusCode), so database readiness could not be confirmed."
+    Describe-Redirect $health
   }
   Check ((Get-HeaderValue $health 'X-Content-Type-Options') -eq 'nosniff') 'Security header X-Content-Type-Options is present.'
   Check (-not [string]::IsNullOrWhiteSpace((Get-HeaderValue $health 'X-Request-Id'))) 'Server generates a request correlation ID.'
 
   $login = $client.GetAsync("$baseUrl/login").GetAwaiter().GetResult()
   Check ([int]$login.StatusCode -eq 200) 'GET /login returns HTTP 200.'
+  if ([int]$login.StatusCode -ne 200) { Describe-Redirect $login }
   Check ((Get-HeaderValue $login 'Content-Security-Policy') -match "default-src 'self'") 'Login page has a Content Security Policy.'
   Check ((Get-HeaderValue $login 'Strict-Transport-Security') -match 'max-age=') 'HTTPS transport security is enabled.'
 
@@ -68,6 +77,7 @@ try {
   $location = Get-HeaderValue $protected 'Location'
   Check ([int]$protected.StatusCode -in 301, 302, 303, 307, 308) 'Unauthenticated GET /modelops redirects rather than serving protected content.'
   Check ($location -match '/login') 'Protected-route redirect targets /login.'
+  if ([int]$protected.StatusCode -in 301, 302, 303, 307, 308) { Describe-Redirect $protected }
 } catch {
   Check $false "Smoke request failed: $($_.Exception.Message)"
 } finally {
