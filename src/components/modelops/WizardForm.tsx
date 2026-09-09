@@ -39,6 +39,8 @@ export interface WizardFormData {
   // Step 4: Metrics
   selectedMetricTypes: string[];
   metrics: Record<string, number>;
+  metric_unit: string;
+  evaluation_reference: string;
   decision_thresholds: string;
   variation_approaches: string;
 
@@ -56,6 +58,7 @@ export interface WizardFormData {
   subgroup_benchmarks: string;
 
   // Step 8: Ethical considerations
+  data_classification: 'unclassified' | 'public' | 'internal' | 'confidential' | 'restricted';
   uses_sensitive_data: boolean;
   impacts_human_life: boolean;
   risks_and_harms: string;
@@ -65,6 +68,12 @@ export interface WizardFormData {
   // Step 9: Caveats and recommendations
   limitations: string;
   reproducibility: string;
+  reproducibility_seed: string;
+  source_revision: string;
+  environment_reference: string;
+  test_reference: string;
+  test_executed_at: string;
+  test_result: '' | 'passed' | 'failed' | 'inconclusive';
   recommendations: string;
 }
 
@@ -100,49 +109,53 @@ export default function WizardForm({
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<WizardFormData>({
     model_name: initialData?.model_name || '',
-    version: initialData?.version || '1.0.0',
-    model_type: initialData?.model_type || 'Natural Language Processing',
-    architecture: initialData?.architecture || 'Transformer (RoBERTa / Attention-based)',
-    developed_by: initialData?.developed_by || 'AI Governance & ML Safety Lab',
-    release_date: initialData?.release_date || new Date().toISOString().split('T')[0],
-    license: initialData?.license || 'Apache-2.0',
+    version: initialData?.version || '',
+    model_type: initialData?.model_type || '',
+    architecture: initialData?.architecture || '',
+    developed_by: initialData?.developed_by || '',
+    release_date: initialData?.release_date || '',
+    license: initialData?.license || '',
 
     intended_use: initialData?.intended_use || '',
-    primary_uses: initialData?.primary_uses || 'Automated triage and classification of enterprise input streams.',
-    out_of_scope_uses: initialData?.out_of_scope_uses || 'Autonomous unmonitored decision making without human governance verification.',
-    target_users: initialData?.target_users || 'Compliance auditors, ML engineers, Risk officers',
+    primary_uses: initialData?.primary_uses || '',
+    out_of_scope_uses: initialData?.out_of_scope_uses || '',
+    target_users: initialData?.target_users || '',
 
-    factors: initialData?.factors || 'Robustness evaluated across domain shifts, background noise, and demographic cohorts.',
-    environment: initialData?.environment || 'Linux x86_64, CUDA 12.2 runtime, edge-optimized INT8 quantization.',
+    factors: initialData?.factors || '',
+    environment: initialData?.environment || '',
 
-    selectedMetricTypes: ['Accuracy', 'F1 Score', 'Latency (ms)'],
-    metrics: initialData?.metrics || { accuracy: 0.92, f1_score: 0.89, latency_ms: 14.5 },
-    decision_thresholds: initialData?.decision_thresholds || 'Argmax score >= 0.85 required for high-confidence automated routing; otherwise routed to human auditor.',
-    variation_approaches: initialData?.variation_approaches || 'Stratified 5-Fold Cross Validation with bootstrap confidence intervals (95% CI).',
+    selectedMetricTypes: Object.keys(initialData?.metrics || {}),
+    metrics: initialData?.metrics || {},
+    metric_unit: '', evaluation_reference: '',
+    decision_thresholds: initialData?.decision_thresholds || '',
+    variation_approaches: initialData?.variation_approaches || '',
 
-    dataset: initialData?.dataset || 'Clinical-NLP-Benchmark-v2',
-    eval_preprocessing: initialData?.eval_preprocessing || 'UTF-8 normalization, lowercasing, token masking, and deterministic test partition isolation.',
-    data_split: initialData?.data_split || '80% Train / 10% Validation / 10% Independent Test Holdout',
+    dataset: initialData?.dataset || '',
+    eval_preprocessing: initialData?.eval_preprocessing || '',
+    data_split: initialData?.data_split || '',
 
-    training_dataset: initialData?.training_dataset || 'Open-Access Curated Annotated Corpus (2.4M tokens)',
-    data_volume: initialData?.data_volume || '150,000 annotated document samples across 12 domain categories',
+    training_dataset: initialData?.training_dataset || '',
+    data_volume: initialData?.data_volume || '',
 
-    disaggregated_results: initialData?.disaggregated_results || 'Subgroup disparity < 1.8% across primary demographic cohorts.',
-    subgroup_benchmarks: initialData?.subgroup_benchmarks || 'High-resource dialect: 93.4% F1; Low-resource edge dialect: 91.2% F1.',
+    disaggregated_results: initialData?.disaggregated_results || '',
+    subgroup_benchmarks: initialData?.subgroup_benchmarks || '',
 
+    data_classification: initialData?.data_classification || 'unclassified',
     uses_sensitive_data: initialData?.uses_sensitive_data ?? false,
-    impacts_human_life: initialData?.impacts_human_life ?? true,
-    risks_and_harms: typeof initialData?.risks === 'string' ? initialData.risks : Array.isArray(initialData?.risks) ? initialData.risks.join(', ') : (initialData?.risks_and_harms || 'Risk of misclassification on out-of-vocabulary domain terminology.'),
-    mitigations: initialData?.mitigations || 'Fallback confidence thresholding and mandatory human-in-the-loop governance review.',
-    use_case_considerations: 'Not authorized for autonomous diagnostic prescription.',
+    impacts_human_life: initialData?.impacts_human_life ?? false,
+    risks_and_harms: typeof initialData?.risks === 'string' ? initialData.risks : Array.isArray(initialData?.risks) ? initialData.risks.join(', ') : (initialData?.risks_and_harms || ''),
+    mitigations: initialData?.mitigations || '',
+    use_case_considerations: '',
 
-    limitations: typeof initialData?.limitations === 'string' ? initialData.limitations : Array.isArray(initialData?.limitations) ? initialData.limitations.join(', ') : 'Degrades in performance on high-noise, heavily compressed, or low-light sensor streams.',
-    reproducibility: initialData?.reproducibility || 'Deterministic random seed 42. sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069',
-    recommendations: initialData?.recommendations || 'Deploy with continuous telemetry drift monitoring and periodic quarterly retraining audits.',
+    limitations: typeof initialData?.limitations === 'string' ? initialData.limitations : Array.isArray(initialData?.limitations) ? initialData.limitations.join(', ') : '',
+    reproducibility: initialData?.reproducibility || '',
+    reproducibility_seed: '', source_revision: '', environment_reference: '', test_reference: '', test_executed_at: '', test_result: '',
+    recommendations: initialData?.recommendations || '',
   });
 
   const [metricKeyInput, setMetricKeyInput] = useState('');
   const [metricValInput, setMetricValInput] = useState('');
+  const [submissionHint, setSubmissionHint] = useState('');
 
   // Sync initialData changes when templates switch
   useEffect(() => {
@@ -190,21 +203,34 @@ export default function WizardForm({
   };
 
   const calculateCompletionPercent = () => {
-    const fieldsToCheck = [
-      formData.model_name,
-      formData.version,
-      formData.developed_by,
-      formData.intended_use,
-      formData.dataset,
-      Object.keys(formData.metrics).length > 0,
-      formData.risks_and_harms,
-      formData.reproducibility,
+    const declaredTests = [formData.disaggregated_results, formData.subgroup_benchmarks, formData.variation_approaches].some((value) => value.trim().length > 0);
+    const evidenceGroups = [
+      Boolean(formData.model_name.trim() && formData.version.trim()),
+      Boolean(formData.intended_use.trim() || formData.primary_uses.trim()),
+      Boolean(formData.dataset.trim()),
+      Boolean(formData.developed_by.trim() || formData.architecture.trim()),
+      Boolean(Object.keys(formData.metrics).length && formData.metric_unit.trim() && formData.evaluation_reference.trim()),
+      Boolean(formData.risks_and_harms.trim()),
+      Boolean(formData.limitations.trim()),
+      Boolean(declaredTests && formData.test_result && formData.test_executed_at && formData.test_reference.trim()),
+      Boolean(formData.reproducibility.trim() && formData.reproducibility_seed.trim() && formData.source_revision.trim() && formData.environment_reference.trim()),
     ];
-    const filled = fieldsToCheck.filter(Boolean).length;
-    return Math.round((filled / fieldsToCheck.length) * 100);
+    return Math.round((evidenceGroups.filter(Boolean).length / evidenceGroups.length) * 100);
   };
 
   const handleFormSubmit = () => {
+    const missingRequired = [
+      !formData.model_name.trim() && { step: 1, label: 'Model name' },
+      !formData.version.trim() && { step: 1, label: 'Version' },
+      !(formData.intended_use.trim() || formData.primary_uses.trim()) && { step: 2, label: 'Primary intended uses' },
+      !formData.dataset.trim() && { step: 5, label: 'Evaluation benchmark dataset' },
+    ].filter(Boolean) as { step: number; label: string }[];
+    if (missingRequired.length > 0) {
+      setCurrentStep(missingRequired[0].step);
+      setSubmissionHint(`To create a draft, complete: ${missingRequired.map((item) => item.label).join(', ')}.`);
+      return;
+    }
+    setSubmissionHint('');
     const limitationsArr = formData.limitations.split('\n').map((s) => s.trim()).filter(Boolean);
     const risksArr = formData.risks_and_harms.split('\n').map((s) => s.trim()).filter(Boolean);
     const testsArr = [
@@ -213,11 +239,16 @@ export default function WizardForm({
       formData.variation_approaches,
     ].filter((s) => Boolean(s && s.trim()));
 
+    const evidence_items: NonNullable<ModelOpsInput['evidence_items']> = [
+      ...Object.entries(formData.metrics).flatMap(([label, value]) => formData.metric_unit && formData.evaluation_reference ? [{ kind: 'metric' as const, label, value: String(value), provenance: 'submitted' as const, reference: formData.evaluation_reference, attributes: { unit: formData.metric_unit, evaluation_reference: formData.evaluation_reference, direction: 'neutral' as const } }] : []),
+      ...risksArr.map((value) => ({ kind: 'risk' as const, label: 'Declared risk', value, provenance: 'submitted' as const })),
+      ...limitationsArr.map((value) => ({ kind: 'limitation' as const, label: 'Declared limitation', value, provenance: 'submitted' as const })),
+      ...(formData.mitigations.trim() ? [{ kind: 'mitigation' as const, label: 'Declared mitigation', value: formData.mitigations.trim(), provenance: 'submitted' as const }] : []),
+      ...testsArr.flatMap((value) => formData.test_reference && formData.test_executed_at && formData.test_result ? [{ kind: 'test_run' as const, label: 'Executed test', value, provenance: 'submitted' as const, reference: formData.test_reference, attributes: { test_result: formData.test_result, executed_at: new Date(formData.test_executed_at).toISOString() } }] : []),
+      ...(formData.reproducibility && formData.reproducibility_seed && formData.source_revision && formData.environment_reference ? [{ kind: 'reproducibility' as const, label: 'Reproducibility record', value: formData.reproducibility, provenance: 'submitted' as const, attributes: { seed: formData.reproducibility_seed, source_revision: formData.source_revision, environment_reference: formData.environment_reference } }] : []),
+    ];
     const payload: ModelOpsInput = {
-      model_name: formData.model_name.trim() || 'ModelOps-Candidate',
-      version: formData.version.trim() || '1.0.0',
-      dataset: formData.dataset.trim() || 'Evaluation-Benchmark',
-      intended_use: formData.intended_use.trim() || formData.primary_uses || 'Enterprise Model Evaluation',
+      model_name: formData.model_name.trim(), version: formData.version.trim(), dataset: formData.dataset.trim(), intended_use: formData.intended_use.trim() || formData.primary_uses.trim(),
       metrics: formData.metrics,
       // 9-section full wiring
       model_type: formData.model_type,
@@ -238,15 +269,17 @@ export default function WizardForm({
       data_volume: formData.data_volume,
       disaggregated_results: formData.disaggregated_results,
       subgroup_benchmarks: formData.subgroup_benchmarks,
+      data_classification: formData.data_classification,
       uses_sensitive_data: formData.uses_sensitive_data,
       impacts_human_life: formData.impacts_human_life,
       risks_and_harms: formData.risks_and_harms,
       mitigations: formData.mitigations,
       recommendations: formData.recommendations,
-      limitations: limitationsArr.length > 0 ? limitationsArr : [formData.limitations],
-      risks: risksArr.length > 0 ? risksArr : [formData.risks_and_harms],
-      tests: testsArr.length > 0 ? testsArr : ['5-Fold Cross Validation', 'Latency SLA Test'],
+      limitations: limitationsArr,
+      risks: risksArr,
+      tests: testsArr,
       reproducibility: formData.reproducibility,
+      evidence_items,
     };
     onSubmit(payload);
   };
@@ -300,11 +333,12 @@ export default function WizardForm({
         {currentStep === 1 && (
           <div className="space-y-4 animate-fadeIn">
             <div>
-              <label className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
+              <label htmlFor="model-name" className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
                 Model name <span className="text-red-500">*</span>
                 <Info className="w-3 h-3 text-gray-400" />
               </label>
               <input
+                id="model-name"
                 type="text"
                 value={formData.model_name}
                 onChange={(e) => updateField('model_name', e.target.value)}
@@ -322,11 +356,12 @@ export default function WizardForm({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
+                <label htmlFor="model-version" className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
                   Version <span className="text-red-500">*</span>
                   <Info className="w-3 h-3 text-gray-400" />
                 </label>
                 <input
+                  id="model-version"
                   type="text"
                   value={formData.version}
                   onChange={(e) => updateField('version', e.target.value)}
@@ -337,7 +372,7 @@ export default function WizardForm({
 
               <div>
                 <label className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
-                  Model type <span className="text-red-500">*</span>
+                  Model type
                 </label>
                 <select
                   value={formData.model_type}
@@ -370,7 +405,7 @@ export default function WizardForm({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
-                  Developed by <span className="text-red-500">*</span>
+                  Developed by
                   <Info className="w-3 h-3 text-gray-400" />
                 </label>
                 <input
@@ -418,11 +453,12 @@ export default function WizardForm({
         {currentStep === 2 && (
           <div className="space-y-4 animate-fadeIn">
             <div>
-              <label className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
+              <label htmlFor="intended-use" className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
                 Primary intended uses <span className="text-red-500">*</span>
                 <Info className="w-3 h-3 text-gray-400" />
               </label>
               <textarea
+                id="intended-use"
                 rows={3}
                 value={formData.intended_use}
                 onChange={(e) => updateField('intended_use', e.target.value)}
@@ -582,6 +618,18 @@ export default function WizardForm({
               </div>
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-amber-50/50 border border-amber-200 rounded">
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 mb-1">Metric unit <span className="text-amber-700">required for score</span></label>
+                <input value={formData.metric_unit} onChange={(e) => updateField('metric_unit', e.target.value)} placeholder="e.g. proportion, ms" className="w-full px-3 py-2 text-xs border border-gray-300 rounded bg-white" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 mb-1">Evaluation run / artifact reference <span className="text-amber-700">required for score</span></label>
+                <input value={formData.evaluation_reference} onChange={(e) => updateField('evaluation_reference', e.target.value)} placeholder="e.g. mlflow://run/123 or internal run ID" className="w-full px-3 py-2 text-xs border border-gray-300 rounded bg-white" />
+              </div>
+              <p className="sm:col-span-2 text-[11px] text-amber-900">Numeric values without a unit and traceable evaluation reference are displayed as input metadata but receive no readiness points.</p>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
                 Decision thresholds
@@ -601,11 +649,12 @@ export default function WizardForm({
         {currentStep === 5 && (
           <div className="space-y-4 animate-fadeIn">
             <div>
-              <label className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
+              <label htmlFor="evaluation-dataset" className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
                 Evaluation benchmark dataset <span className="text-red-500">*</span>
                 <Info className="w-3 h-3 text-gray-400" />
               </label>
               <input
+                id="evaluation-dataset"
                 type="text"
                 value={formData.dataset}
                 onChange={(e) => updateField('dataset', e.target.value)}
@@ -769,6 +818,18 @@ export default function WizardForm({
               </div>
             </div>
 
+            <div className="rounded border border-amber-200 bg-amber-50/50 p-3">
+              <label htmlFor="data-classification" className="block text-xs font-semibold text-gray-800 mb-1">Data classification</label>
+              <select id="data-classification" value={formData.data_classification} onChange={(event) => updateField('data_classification', event.target.value as WizardFormData['data_classification'])} className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
+                <option value="unclassified">Unclassified — external AI disabled</option>
+                <option value="public">Public — may use external AI only when marked non-sensitive</option>
+                <option value="internal">Internal — external AI disabled</option>
+                <option value="confidential">Confidential — external AI disabled</option>
+                <option value="restricted">Restricted — external AI disabled</option>
+              </select>
+              <p className="mt-2 text-[11px] text-amber-900">External AI suggestions are fail-closed: only explicitly public, non-sensitive evaluations may leave this workspace when the organization enables that feature.</p>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-gray-800 mb-1 flex items-center gap-1">
                 Identified operational risks and potential harms <span className="text-red-500">*</span>
@@ -827,6 +888,20 @@ export default function WizardForm({
                 placeholder="e.g., Deterministic seed 42. sha256:7f83b1..."
                 className="w-full px-3.5 py-2 text-sm border border-gray-300 rounded bg-white text-gray-900 font-mono focus:outline-none focus:ring-1 focus:ring-[#13715B] focus:border-[#13715B]"
               />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-amber-50/50 border border-amber-200 rounded">
+              <div><label className="block text-xs font-semibold text-gray-800 mb-1">Random seed</label><input value={formData.reproducibility_seed} onChange={(e) => updateField('reproducibility_seed', e.target.value)} className="w-full px-3 py-2 text-xs border border-gray-300 rounded bg-white" /></div>
+              <div><label className="block text-xs font-semibold text-gray-800 mb-1">Source revision</label><input value={formData.source_revision} onChange={(e) => updateField('source_revision', e.target.value)} placeholder="Git commit / immutable revision" className="w-full px-3 py-2 text-xs border border-gray-300 rounded bg-white" /></div>
+              <div><label className="block text-xs font-semibold text-gray-800 mb-1">Environment reference</label><input value={formData.environment_reference} onChange={(e) => updateField('environment_reference', e.target.value)} placeholder="Lockfile / container digest" className="w-full px-3 py-2 text-xs border border-gray-300 rounded bg-white" /></div>
+              <p className="sm:col-span-3 text-[11px] text-amber-900">All three fields are required before reproducibility can earn readiness points.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-amber-50/50 border border-amber-200 rounded">
+              <div><label className="block text-xs font-semibold text-gray-800 mb-1">Test result</label><select value={formData.test_result} onChange={(e) => updateField('test_result', e.target.value as WizardFormData['test_result'])} className="w-full px-3 py-2 text-xs border border-gray-300 rounded bg-white"><option value="">Select result</option><option value="passed">Passed</option><option value="failed">Failed</option><option value="inconclusive">Inconclusive</option></select></div>
+              <div><label className="block text-xs font-semibold text-gray-800 mb-1">Test execution date</label><input type="datetime-local" value={formData.test_executed_at} onChange={(e) => updateField('test_executed_at', e.target.value)} className="w-full px-3 py-2 text-xs border border-gray-300 rounded bg-white" /></div>
+              <div><label className="block text-xs font-semibold text-gray-800 mb-1">Test report reference</label><input value={formData.test_reference} onChange={(e) => updateField('test_reference', e.target.value)} placeholder="Report / CI run URL or ID" className="w-full px-3 py-2 text-xs border border-gray-300 rounded bg-white" /></div>
+              <p className="sm:col-span-3 text-[11px] text-amber-900">A declared test is not verification evidence until result, execution date, and report reference are supplied.</p>
             </div>
 
             <div>
@@ -893,13 +968,14 @@ export default function WizardForm({
             )}
           </div>
         </div>
+        {submissionHint && <p role="alert" className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">{submissionHint}</p>}
       </div>
 
       {/* 4. Overall Completion Progress Card */}
       <div className="bg-white border border-gray-300 rounded-md p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2 text-gray-700">
           <FileCheck className="w-4 h-4 text-[#13715B]" />
-          <span className="font-semibold">Overall Dossier Completion:</span>
+          <span className="font-semibold">Evidence-backed dossier completion:</span>
           <span className="font-mono font-bold text-gray-900">{completionPercent}%</span>
         </div>
         <div className="w-full sm:w-48 h-2 bg-gray-100 rounded-full overflow-hidden border border-gray-200">

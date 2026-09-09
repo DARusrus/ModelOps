@@ -70,24 +70,18 @@ describe('ModelOps Validators', () => {
   describe('CompareRequestSchema', () => {
     it('should validate a correct compare request', () => {
       const payload = {
-        run1: {
-          model_name: 'ModelA',
-          metrics: { accuracy: 0.9 },
-        },
-        run2: {
-          model_name: 'ModelA',
-          metrics: { accuracy: 0.95 },
-        }
+        baseline_id: '00000000-0000-4000-8000-000000000001',
+        candidate_id: '00000000-0000-4000-8000-000000000002',
       };
 
       const parsed = CompareRequestSchema.parse(payload);
-      expect(parsed.run1.model_name).toBe('ModelA');
-      expect(parsed.run2.metrics.accuracy).toBe(0.95);
+      expect(parsed.baseline_id).toBe(payload.baseline_id);
+      expect(parsed.candidate_id).toBe(payload.candidate_id);
     });
 
     it('should throw if run1 or run2 is missing', () => {
       const invalidPayload = {
-        run1: { model_name: 'ModelA' }
+        baseline_id: '00000000-0000-4000-8000-000000000001',
       };
 
       expect(() => CompareRequestSchema.parse(invalidPayload)).toThrowError(/Required/);

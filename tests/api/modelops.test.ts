@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { validateInput } from '../../src/lib/modelops/validators';
-import { processModelOpsRequest } from '../../src/lib/modelops/service';
+import { isPublicNonSensitiveEvaluation, processModelOpsRequest } from '../../src/lib/modelops/service';
 
 describe('ModelOps Evaluation Service & Pipeline', () => {
   it('should validate valid metadata input correctly', () => {
@@ -16,6 +16,7 @@ describe('ModelOps Evaluation Service & Pipeline', () => {
     expect(validated.model_name).toBe('BERT-Sentiment');
     expect(validated.version).toBe('1.0.0');
     expect(validated.dataset).toBe('IMDB Reviews');
+    expect(validated.data_classification).toBe('unclassified');
   });
 
   it('should support legacy shorthand "model" attribute', () => {
@@ -48,21 +49,26 @@ describe('ModelOps Evaluation Service & Pipeline', () => {
     expect(result.experiment_info).toBeDefined();
   });
 
-  it('should return a cached result for an identical request', async () => {
+  it('should evaluate identical requests without retaining request data in a process cache', async () => {
     const metadata = {
-      model_name: 'Cache-Test-Model',
+      model_name: 'Repeat-Test-Model',
       version: '1.0.0',
-      dataset: 'Cache-Dataset',
-      intended_use: 'Testing the LRU cache',
+      dataset: 'Repeat-Dataset',
+      intended_use: 'Testing repeat evaluation',
       metrics: { accuracy: 0.99 },
     };
 
     const firstResult = await processModelOpsRequest(metadata);
     const secondResult = await processModelOpsRequest(metadata);
 
-    // The second result should be referentially identical or equal
-    // and fetched instantaneously without hitting the AI provider
     expect(secondResult).toEqual(firstResult);
+    expect(secondResult).not.toBe(firstResult);
+  });
+
+  it('permits external AI only for an explicit public, non-sensitive declaration', () => {
+    expect(isPublicNonSensitiveEvaluation({ data_classification: 'public', uses_sensitive_data: false })).toBe(true);
+    expect(isPublicNonSensitiveEvaluation({ data_classification: 'public', uses_sensitive_data: true })).toBe(false);
+    expect(isPublicNonSensitiveEvaluation({ data_classification: 'internal', uses_sensitive_data: false })).toBe(false);
+    expect(isPublicNonSensitiveEvaluation({ data_classification: 'unclassified', uses_sensitive_data: false })).toBe(false);
   });
 });
-

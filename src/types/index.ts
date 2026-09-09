@@ -32,11 +32,13 @@ export interface ExperimentMetadata {
   data_volume?: string;
   disaggregated_results?: string;
   subgroup_benchmarks?: string;
+  data_classification?: 'unclassified' | 'public' | 'internal' | 'confidential' | 'restricted';
   uses_sensitive_data?: boolean;
   impacts_human_life?: boolean;
   risks_and_harms?: string;
   mitigations?: string;
   recommendations?: string;
+  evidence_items?: import('@/domain/modelops/evidence').EvidenceItem[];
 }
 
 export interface AIProviderResponse {
@@ -64,25 +66,8 @@ export interface ReadinessScoreResult {
   breakdown: Record<string, number>;
 }
 
-export interface MetricDiff {
-  metric_name: string;
-  run1_value: number;
-  run2_value: number;
-  delta: number;
-  direction: 'improved' | 'degraded' | 'unchanged';
-}
-
-export interface CompareRunsOutput {
-  model_name_1: string;
-  version_1: string;
-  model_name_2: string;
-  version_2: string;
-  metrics_diff: MetricDiff[];
-  readiness_score_1: number;
-  readiness_score_2: number;
-  readiness_delta: number;
-  summary: string[];
-}
+export type MetricDiff = import('@/domain/modelops/api-contracts').MetricDiff;
+export type CompareRunsOutput = import('@/domain/modelops/api-contracts').CompareRunsOutput;
 
 export interface ToolRuleViolation {
   rule: string;

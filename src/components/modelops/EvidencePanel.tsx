@@ -53,7 +53,7 @@ export default function EvidencePanel({ modelCard }: EvidencePanelProps) {
             <span className="px-2.5 py-0.5 bg-emerald-50 text-[#13715B] border border-emerald-200 rounded text-[11px] font-bold uppercase tracking-wider font-mono">
               Audit & Verification Findings
             </span>
-            <span className="text-xs text-gray-500 font-mono">Deterministic Verification</span>
+            <span className="text-xs text-gray-500 font-mono">Provenance ledger</span>
           </div>
           <h3 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-[#13715B]" />
@@ -63,12 +63,12 @@ export default function EvidencePanel({ modelCard }: EvidencePanelProps) {
 
         <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded text-xs text-[#13715B] font-mono self-start sm:self-auto font-semibold">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span>Verified Tool Execution</span>
+          <span>Evidence status</span>
         </div>
       </div>
 
       <p className="text-xs text-gray-600 leading-relaxed">
-        <strong className="text-gray-900">Deterministic Tool Findings vs Model Narrative:</strong> The items below represent raw, deterministic outputs produced directly by automated evaluation tools and static analysis pipelines. They are structurally isolated from LLM-generated prose to prevent hallucinated governance claims.
+        <strong className="text-gray-900">Evidence is not AI output:</strong> official scoring reads only submitted or verified-derived evidence. AI text remains an unverified suggestion and cannot establish a governance fact.
       </p>
 
       {/* Grid Section 1: Deterministic Tool Findings vs Model Narrative */}
@@ -77,15 +77,15 @@ export default function EvidencePanel({ modelCard }: EvidencePanelProps) {
         <div className="bg-gray-50 p-5 rounded border border-gray-200 space-y-3">
           <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2 font-mono">
             <Terminal className="w-4 h-4 text-[#13715B]" />
-            1. Deterministic Tool Outputs
+            1. Submitted & verified evidence
           </h4>
           <ul className="space-y-2 text-xs font-mono text-gray-700">
-            {evidenceList.map((item: string, idx: number) => (
-              <li key={idx} className="p-2.5 bg-white rounded border border-gray-200 flex items-start gap-2 shadow-2xs">
-                <span className="text-[#13715B] font-bold shrink-0">›</span>
-                <span className="break-all">{item}</span>
+            {modelCard.evidence_items?.length ? modelCard.evidence_items.map((item, idx) => (
+              <li key={`${item.kind}-${idx}`} className="p-2.5 bg-white rounded border border-gray-200 space-y-1 shadow-2xs">
+                <div className="flex flex-wrap items-center gap-1.5"><span className="px-1.5 py-0.5 text-[10px] bg-emerald-50 border border-emerald-200 text-[#13715B] rounded uppercase">{(item.provenance ?? 'missing').replace('_', ' ')}</span><span className="font-bold text-gray-800">{item.label}</span></div>
+                <p className="break-all">{item.value}</p>{item.reference && <p className="text-[10px] text-gray-500 break-all">ref: {item.reference}</p>}
               </li>
-            ))}
+            )) : evidenceList.map((item, idx) => <li key={idx} className="p-2.5 bg-white rounded border border-gray-200 flex items-start gap-2 shadow-2xs"><span className="text-[#13715B] font-bold shrink-0">›</span><span className="break-all">{item}</span></li>)}
           </ul>
         </div>
 
@@ -93,9 +93,10 @@ export default function EvidencePanel({ modelCard }: EvidencePanelProps) {
         <div className="bg-gray-50 p-5 rounded border border-gray-200 space-y-3">
           <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2 font-mono">
             <Bot className="w-4 h-4 text-[#13715B]" />
-            2. AI Synthesized Synthesis
+            2. AI suggestion (not evidence)
           </h4>
           <div className="p-3.5 bg-white rounded border border-gray-200 text-xs text-gray-700 space-y-2.5 shadow-2xs">
+            <p className="inline-flex rounded border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-[10px] uppercase text-amber-800">{modelCard.ai_suggestions?.status?.replaceAll('_', ' ') || 'deterministic only'}</p>
             <p className="leading-relaxed">
               {modelCard.ai_analysis ||
                 `The AI governance pipeline synthesized the experiment metadata for "${modelCard.model_name || 'this model'}", confirming compatibility with the "${modelCard.dataset || 'target'}" benchmark dataset.`}

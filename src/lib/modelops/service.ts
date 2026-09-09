@@ -1,54 +1,55 @@
 import { generateWithFallback, GenerateOptions } from '../ai/providers';
 import { buildModelCardPrompt } from '../ai/prompts';
 import { parseAndValidateAIResponse } from '../ai/validators';
-import { readiness_score } from './tools';
 import { ModelCardOutput } from './schema';
 import { ExperimentMetadata } from '@/types';
 import { logger } from '../logger';
-import { LRUCache } from './lru';
+import { EvidenceItem, EvidenceItemSchema, RUBRIC_VERSION, scoreEvidence } from '@/domain/modelops/evidence';
+import { PROMPT_TEMPLATE_VERSION } from '../ai/prompts';
+import { env } from '../env';
 
-const RESPONSE_CACHE = new LRUCache<string, ModelCardOutput>(100);
+function submittedEvidence(metadata: ExperimentMetadata): EvidenceItem[] {
+  const foundational: EvidenceItem[] = [
+    { kind: 'model_identity', label: 'Model identity', value: `${metadata.model_name} ${metadata.version}`, provenance: 'submitted', reference: 'model-card-input' },
+    { kind: 'dataset', label: 'Evaluation dataset', value: metadata.dataset, provenance: 'submitted', reference: 'model-card-input' },
+  ];
+  const supplied = (metadata.evidence_items || []).map((item) => ({ ...item, provenance: 'submitted' as const }));
+  return [...foundational, ...supplied].map((item) => EvidenceItemSchema.parse(item));
+}
+
+/** External providers receive only explicitly public, non-sensitive evidence. */
+export function isPublicNonSensitiveEvaluation(metadata: Pick<ExperimentMetadata, 'data_classification' | 'uses_sensitive_data'>): boolean {
+  return metadata.data_classification === 'public' && metadata.uses_sensitive_data === false;
+}
 
 export async function processModelOpsRequest(
   metadata: ExperimentMetadata,
   aiOptions: GenerateOptions = {}
 ): Promise<ModelCardOutput> {
-  const cacheKey = JSON.stringify({ metadata, provider: aiOptions.preferredProvider || 'auto' });
-  if (RESPONSE_CACHE.has(cacheKey)) {
-    const cachedResult = RESPONSE_CACHE.get(cacheKey)!;
-    logger.info(`[Service] Cache hit for model: "${metadata.model_name}" (v${metadata.version})`);
-    return cachedResult;
-  }
-
-  logger.info(`[Service] Processing ModelOps evaluation for model: "${metadata.model_name}" (v${metadata.version})`);
+  logger.info('[Service] Processing ModelOps evaluation');
 
   let parsedCard: Partial<ModelCardOutput>;
+  const evidenceItems = submittedEvidence(metadata);
+
+  const externalAiAllowed = env.AI_EGRESS_MODE === 'non_sensitive_only' && isPublicNonSensitiveEvaluation(metadata);
 
   try {
-    const prompt = buildModelCardPrompt(metadata);
+    if (!externalAiAllowed) {
+      throw new Error(
+        metadata.uses_sensitive_data
+          ? 'External AI suggestions are disabled for sensitive-data evaluations.'
+          : 'External AI suggestions require AI_EGRESS_MODE=non_sensitive_only, an explicit public classification, and a non-sensitive-data declaration.'
+      );
+    }
+    const prompt = buildModelCardPrompt(evidenceItems);
     const aiResult = await generateWithFallback(prompt, aiOptions);
-    logger.info(`[Service] AI generation completed via provider "${aiResult.provider}".`);
+    logger.info('[Service] AI generation completed', { provider: aiResult.provider });
     parsedCard = parseAndValidateAIResponse(aiResult.raw_text, metadata);
   } catch (error: unknown) {
-    logger.warn(`[Service] AI Generation unavailable or offline fallback requested: ${error instanceof Error ? error.message : String(error)}. Synthesizing deterministic fallback Model Card.`);
+    logger.warn('[Service] AI suggestion unavailable; deterministic fallback selected', { error_type: error instanceof Error ? error.name : 'UNKNOWN' });
+    const suggestionStatus = externalAiAllowed ? 'provider_unavailable' : 'deterministic_only';
     
     // Synthesize fallback card strictly grounded in user-supplied 9-section metadata
-    const userLimitations = metadata.limitations && metadata.limitations.length > 0
-      ? metadata.limitations
-      : ['Evaluated with basic experiment metadata.'];
-
-    const userRisks = metadata.risks && metadata.risks.length > 0
-      ? metadata.risks
-      : metadata.risks_and_harms ? [metadata.risks_and_harms] : ['Standard operational deployment risks.'];
-
-    const userTests = metadata.tests && metadata.tests.length > 0
-      ? metadata.tests
-      : metadata.disaggregated_results ? [metadata.disaggregated_results] : ['Baseline metrics evaluation.'];
-
-    const userReproducibility = metadata.reproducibility && metadata.reproducibility.trim().length > 0
-      ? metadata.reproducibility
-      : 'Standard pipeline execution';
-
     parsedCard = {
       model_name: metadata.model_name,
       version: metadata.version,
@@ -59,40 +60,46 @@ export async function processModelOpsRequest(
       distribution_summary: metadata.eval_preprocessing || metadata.data_volume || 'Distribution data not provided in experiment metadata.',
       metrics: metadata.metrics || {},
       intended_use: metadata.intended_use || metadata.primary_uses || 'General evaluation',
-      warnings: ['Generated in deterministic offline mode due to AI provider unavailability or user offline preference.'],
-      limitations: userLimitations,
-      risks: userRisks,
-      tests: userTests,
-      reproducibility: userReproducibility,
+      warnings: [externalAiAllowed ? 'AI suggestion service unavailable; deterministic evaluation completed.' : 'External AI suggestions were not used; deterministic evaluation completed.'],
+      limitations: metadata.limitations || [],
+      risks: metadata.risks || [],
+      tests: metadata.tests || [],
+      reproducibility: metadata.reproducibility || 'Not supplied.',
       ai_analysis: 'Deterministic governance analysis performed without active LLM provider connection.',
       detected_issues: metadata.uses_sensitive_data ? ['Model uses sensitive or personal data; ensure GDPR/HIPAA compliance controls.'] : [],
       error_reasons: [],
-      suggested_fixes: metadata.mitigations ? [metadata.mitigations] : ['Add explicit test cases and risk assessments to increase readiness score.'],
-      next_steps: metadata.recommendations ? [metadata.recommendations] : ['Submit model card for human governance sign-off.'],
+      suggested_fixes: metadata.mitigations ? [metadata.mitigations] : [],
+      next_steps: metadata.recommendations ? [metadata.recommendations] : [],
       references: metadata.license ? [`License: ${metadata.license}`] : [],
       evidence: [
         `Model name: ${metadata.model_name}`,
         `Dataset: ${metadata.dataset}`,
         `Developed by: ${metadata.developed_by || 'AI Engineering Team'}`,
       ],
+      ai_suggestions: { status: suggestionStatus, prompt_template_version: PROMPT_TEMPLATE_VERSION, items: [] },
     };
   }
 
-  // Calculate deterministic readiness score (NEVER set by AI)
-  const computedScore = readiness_score({
-    ...parsedCard,
-    ...metadata,
-  });
+  // Official score reads only submitted or verified-derived evidence, never AI prose.
+  const score = scoreEvidence(evidenceItems);
 
   // Set final card with deterministic score and human review decision
   const finalCard: ModelCardOutput = {
     ...(parsedCard as ModelCardOutput),
-    readiness_score: computedScore,
+    metadata: {
+      ...(parsedCard.metadata || {}),
+      data_classification: metadata.data_classification,
+      uses_sensitive_data: metadata.uses_sensitive_data,
+      impacts_human_life: metadata.impacts_human_life,
+      mitigations: metadata.mitigations,
+    },
+    evidence_items: evidenceItems,
+    rubric_version: RUBRIC_VERSION,
+    score_breakdown: score.breakdown,
+    readiness_score: score.score,
     decision: 'pending_human_review', // Never auto-approved
   };
 
-  RESPONSE_CACHE.set(cacheKey, finalCard);
-
-  logger.info(`[Service] Evaluation finished. Readiness Score: ${computedScore}/100.`);
+  logger.info(`[Service] Evaluation finished. Readiness Score: ${score.score}/100.`);
   return finalCard;
 }

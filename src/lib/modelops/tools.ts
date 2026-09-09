@@ -4,18 +4,31 @@ import {
   MetricDiff,
   ToolRuleViolation,
 } from '@/types';
+import { metricDirection } from '@/domain/modelops/metric-registry';
+import { EvidenceItem } from '@/domain/modelops/evidence';
+
+type EvaluationRecord = Record<string, unknown> & {
+  model_name?: string; version?: string; dataset?: string; metrics?: Record<string, number>;
+  input_shape?: string; data_types?: string[]; limitations?: string[] | string; risks?: string[] | string;
+  warnings?: string[] | string; tests?: string[] | string; reproducibility?: string; intended_use?: string;
+  evidence_items?: EvidenceItem[];
+};
+
+function asEvaluationRecord(value: unknown): EvaluationRecord {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as EvaluationRecord : {};
+}
 
 /**
  * Calculates a deterministic model readiness score (0-100) based on documentation completeness.
  */
-export function readiness_score(data: any): number {
+export function readiness_score(data: unknown): number {
   return readiness_score_detail(data).score;
 }
 
 /**
  * Detailed readiness score calculation returning breakdown and justifications.
  */
-export function readiness_score_detail(data: any): ReadinessScoreResult {
+export function readiness_score_detail(data: unknown): ReadinessScoreResult {
   if (!data || typeof data !== 'object') {
     return {
       score: 0,
@@ -38,12 +51,13 @@ export function readiness_score_detail(data: any): ReadinessScoreResult {
     };
   }
 
+  const record = asEvaluationRecord(data);
   const justifications: ReadinessScoreResult['justification'] = [];
   const breakdown: Record<string, number> = {};
 
   // 1. Model Identification (Max 10 pts)
-  const hasName = Boolean(data.model_name && String(data.model_name).trim().length > 0);
-  const hasVersion = Boolean(data.version && String(data.version).trim().length > 0);
+  const hasName = Boolean(record.model_name && String(record.model_name).trim().length > 0);
+  const hasVersion = Boolean(record.version && String(record.version).trim().length > 0);
   const idPoints = (hasName ? 5 : 0) + (hasVersion ? 5 : 0);
   breakdown['identification'] = idPoints;
   justifications.push({
@@ -55,16 +69,12 @@ export function readiness_score_detail(data: any): ReadinessScoreResult {
   });
 
   // 2. Dataset Documentation (Max 15 pts)
-  const hasDataset = Boolean(data.dataset && String(data.dataset).trim().length > 0);
+  const hasDataset = Boolean(record.dataset && String(record.dataset).trim().length > 0);
   const hasInputShape = Boolean(
-    (data.input_shape && data.input_shape !== 'Not specified') ||
-    data.data_split ||
-    data.eval_preprocessing
+    (record.input_shape && record.input_shape !== 'Not specified') || record.data_split || record.eval_preprocessing
   );
   const hasDataTypes = Boolean(
-    (Array.isArray(data.data_types) && data.data_types.length > 0) ||
-    data.training_dataset ||
-    data.data_volume
+    (Array.isArray(record.data_types) && record.data_types.length > 0) || record.training_dataset || record.data_volume
   );
   const datasetPoints = (hasDataset ? 7 : 0) + (hasInputShape ? 4 : 0) + (hasDataTypes ? 4 : 0);
   breakdown['dataset'] = datasetPoints;
@@ -77,7 +87,7 @@ export function readiness_score_detail(data: any): ReadinessScoreResult {
   });
 
   // 3. Quantitative Evaluation Metrics (Max 25 pts)
-  const metricsCount = data.metrics ? Object.keys(data.metrics).length : 0;
+  const metricsCount = record.metrics ? Object.keys(record.metrics).length : 0;
   let metricsPoints = 0;
   if (metricsCount >= 3) metricsPoints = 25;
   else if (metricsCount === 2) metricsPoints = 18;
@@ -92,25 +102,25 @@ export function readiness_score_detail(data: any): ReadinessScoreResult {
   });
 
   // 4. Governance & Risk Management (Max 25 pts)
-  const limitationsCount = Array.isArray(data.limitations)
-    ? data.limitations.length
-    : typeof data.limitations === 'string' && data.limitations.trim().length > 0
+  const limitationsCount = Array.isArray(record.limitations)
+    ? record.limitations.length
+    : typeof record.limitations === 'string' && record.limitations.trim().length > 0
     ? 1
     : 0;
 
-  const risksCount = Array.isArray(data.risks)
-    ? data.risks.length
-    : typeof data.risks === 'string' && data.risks.trim().length > 0
+  const risksCount = Array.isArray(record.risks)
+    ? record.risks.length
+    : typeof record.risks === 'string' && record.risks.trim().length > 0
     ? 1
-    : data.risks_and_harms && String(data.risks_and_harms).trim().length > 0
+    : record.risks_and_harms && String(record.risks_and_harms).trim().length > 0
     ? 1
     : 0;
 
-  const warningsCount = Array.isArray(data.warnings)
-    ? data.warnings.length
-    : typeof data.warnings === 'string' && data.warnings.trim().length > 0
+  const warningsCount = Array.isArray(record.warnings)
+    ? record.warnings.length
+    : typeof record.warnings === 'string' && record.warnings.trim().length > 0
     ? 1
-    : data.mitigations && String(data.mitigations).trim().length > 0
+    : record.mitigations && String(record.mitigations).trim().length > 0
     ? 1
     : 0;
 
@@ -125,9 +135,9 @@ export function readiness_score_detail(data: any): ReadinessScoreResult {
   });
 
   // 5. Verification & Testing (Max 25 pts)
-  const testsCount = Array.isArray(data.tests)
-    ? data.tests.length
-    : typeof data.tests === 'string' && data.tests.trim().length > 0
+  const testsCount = Array.isArray(record.tests)
+    ? record.tests.length
+    : typeof record.tests === 'string' && record.tests.trim().length > 0
     ? 1
     : 0;
 
@@ -139,10 +149,7 @@ export function readiness_score_detail(data: any): ReadinessScoreResult {
     'n/a',
   ];
   const hasReproducibility = Boolean(
-    data.reproducibility &&
-    typeof data.reproducibility === 'string' &&
-    data.reproducibility.trim().length > 0 &&
-    !reproducibilityDefaults.includes(data.reproducibility.trim())
+    record.reproducibility && typeof record.reproducibility === 'string' && record.reproducibility.trim().length > 0 && !reproducibilityDefaults.includes(record.reproducibility.trim())
   );
   const testPoints = Math.min(25, (testsCount > 0 ? 15 : 0) + (hasReproducibility ? 10 : 0));
   breakdown['testing'] = testPoints;
@@ -167,31 +174,53 @@ export function readiness_score_detail(data: any): ReadinessScoreResult {
  * Deterministically compares two experiment runs and returns structured diffs.
  */
 export function compare_runs(
-  run1: any,
-  run2: any
+  run1: unknown,
+  run2: unknown
 ): CompareRunsOutput {
-  const name1 = run1?.model_name || 'Run 1';
-  const ver1 = run1?.version || '1.0.0';
-  const name2 = run2?.model_name || 'Run 2';
-  const ver2 = run2?.version || '2.0.0';
+  const firstRun = asEvaluationRecord(run1);
+  const secondRun = asEvaluationRecord(run2);
+  const name1 = firstRun.model_name || 'Run 1';
+  const ver1 = firstRun.version || '1.0.0';
+  const name2 = secondRun.model_name || 'Run 2';
+  const ver2 = secondRun.version || '2.0.0';
 
-  const metrics1 = run1?.metrics || {};
-  const metrics2 = run2?.metrics || {};
+  const metrics1 = firstRun.metrics || {};
+  const metrics2 = secondRun.metrics || {};
   const allMetricKeys = Array.from(new Set([...Object.keys(metrics1), ...Object.keys(metrics2)]));
+  const evidence1 = Array.isArray(firstRun.evidence_items) ? firstRun.evidence_items : [];
+  const evidence2 = Array.isArray(secondRun.evidence_items) ? secondRun.evidence_items : [];
+  const usesStructuredEvidence = evidence1.length > 0 || evidence2.length > 0;
+  const metricEvidence = (evidence: EvidenceItem[], key: string) => evidence.find((item) => item.kind === 'metric' && item.label.trim().toLowerCase() === key.trim().toLowerCase());
 
   const metricsDiff: MetricDiff[] = allMetricKeys.map((key) => {
-    const val1 = metrics1[key] ?? 0;
-    const val2 = metrics2[key] ?? 0;
+    const val1 = metrics1[key];
+    const val2 = metrics2[key];
+    if (typeof val1 !== 'number' || typeof val2 !== 'number') {
+      return {
+        metric_name: key,
+        run1_value: val1 ?? Number.NaN,
+        run2_value: val2 ?? Number.NaN,
+        delta: Number.NaN,
+        direction: 'unchanged',
+        comparison_status: 'not_measured',
+        reason: 'The metric was not measured in both runs.',
+      };
+    }
+    const evidenceForRun1 = metricEvidence(evidence1, key);
+    const evidenceForRun2 = metricEvidence(evidence2, key);
+    if (usesStructuredEvidence) {
+      if (firstRun.dataset !== secondRun.dataset) return { metric_name: key, run1_value: val1, run2_value: val2, delta: Number.NaN, direction: 'unchanged', comparison_status: 'different_dataset', reason: 'The runs use different evaluation datasets.' };
+      if (!evidenceForRun1 || !evidenceForRun2 || !evidenceForRun1.attributes?.unit || !evidenceForRun2.attributes?.unit || !evidenceForRun1.reference || !evidenceForRun2.reference) return { metric_name: key, run1_value: val1, run2_value: val2, delta: Number.NaN, direction: 'unchanged', comparison_status: 'not_comparable', reason: 'Both runs need metric evidence with a unit and source reference.' };
+      if (evidenceForRun1.attributes.unit !== evidenceForRun2.attributes.unit) return { metric_name: key, run1_value: val1, run2_value: val2, delta: Number.NaN, direction: 'unchanged', comparison_status: 'incompatible_unit', reason: `Metric units differ (${evidenceForRun1.attributes.unit} vs ${evidenceForRun2.attributes.unit}).` };
+    }
     const delta = val2 - val1;
-
-    // For metrics like loss or error, lower is better. Default: higher is better unless key contains 'loss' or 'error'
-    const lowerIsBetter = key.toLowerCase().includes('loss') || key.toLowerCase().includes('error');
+    const directionDefinition = metricDirection(key);
     let direction: 'improved' | 'degraded' | 'unchanged' = 'unchanged';
 
     if (delta !== 0) {
-      if (lowerIsBetter) {
+      if (directionDefinition === 'lower_is_better') {
         direction = delta < 0 ? 'improved' : 'degraded';
-      } else {
+      } else if (directionDefinition === 'higher_is_better') {
         direction = delta > 0 ? 'improved' : 'degraded';
       }
     }
@@ -202,6 +231,8 @@ export function compare_runs(
       run2_value: val2,
       delta: Number(delta.toFixed(4)),
       direction,
+      comparison_status: 'comparable',
+      unit: evidenceForRun1?.attributes?.unit,
     };
   });
 
@@ -244,10 +275,11 @@ export function compare_runs(
 /**
  * Validates tool rule compliance.
  */
-export function check_rules(card: any): ToolRuleViolation[] {
+export function check_rules(card: unknown): ToolRuleViolation[] {
+  const record = asEvaluationRecord(card);
   const violations: ToolRuleViolation[] = [];
 
-  if (!card?.model_name) {
+  if (!record.model_name) {
     violations.push({
       rule: 'model_name_required',
       severity: 'error',
@@ -255,7 +287,7 @@ export function check_rules(card: any): ToolRuleViolation[] {
     });
   }
 
-  if (!card?.version) {
+  if (!record.version) {
     violations.push({
       rule: 'version_required',
       severity: 'error',
@@ -263,7 +295,7 @@ export function check_rules(card: any): ToolRuleViolation[] {
     });
   }
 
-  if (!card?.metrics || Object.keys(card.metrics).length === 0) {
+  if (!record.metrics || Object.keys(record.metrics).length === 0) {
     violations.push({
       rule: 'metrics_required',
       severity: 'warning',
@@ -271,7 +303,7 @@ export function check_rules(card: any): ToolRuleViolation[] {
     });
   }
 
-  if (!card?.intended_use) {
+  if (!record.intended_use) {
     violations.push({
       rule: 'intended_use_required',
       severity: 'warning',

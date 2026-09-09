@@ -72,15 +72,29 @@ describe('compare_runs — fixture-based coverage (Zein)', () => {
     expect(loss?.direction).toBe('improved'); // lower loss is better
   });
 
-  it('DOCUMENTS the known quality finding: a metric missing from one run defaults to 0, not "not measured"', () => {
+  it('does not invent a zero value when a metric was not measured', () => {
     const exp3 = findRecord('exp-003'); // no metrics at all
     const exp4 = findRecord('exp-004'); // has accuracy, f1
     const result = compare_runs(exp3, exp4);
     const f1Diff = result.metrics_diff.find((m) => m.metric_name === 'f1');
-    // Current (imperfect) behavior — this test documents it, it does not endorse it.
-    expect(f1Diff?.run1_value).toBe(0);
-    expect(f1Diff?.direction).toBe('improved');
-    // See KNOWN_QUALITY_FINDINGS in tool-rules.ts for why this is flagged for review.
+    expect(f1Diff?.run1_value).toBeNaN();
+    expect(f1Diff?.run2_value).toBe(0.83);
+    expect(f1Diff?.delta).toBeNaN();
+    expect(f1Diff?.direction).toBe('unchanged');
+    expect(f1Diff?.comparison_status).toBe('not_measured');
+  });
+
+  it('refuses a structured comparison when the evidence units differ', () => {
+    const run1 = { model_name: 'A', version: '1', dataset: 'Benchmark', metrics: { latency: 100 }, evidence_items: [{ kind: 'metric', label: 'latency', reference: 'run-a', attributes: { unit: 'ms', evaluation_reference: 'Benchmark' } }] };
+    const run2 = { model_name: 'A', version: '2', dataset: 'Benchmark', metrics: { latency: 0.1 }, evidence_items: [{ kind: 'metric', label: 'latency', reference: 'run-b', attributes: { unit: 's', evaluation_reference: 'Benchmark' } }] };
+    const latency = compare_runs(run1, run2).metrics_diff[0];
+    expect(latency.comparison_status).toBe('incompatible_unit');
+    expect(latency.delta).toBeNaN();
+  });
+
+  it('compares structured metrics only when the evaluation dataset is the same', () => {
+    const evidence = [{ kind: 'metric', label: 'accuracy', reference: 'evaluation-run', attributes: { unit: 'ratio', evaluation_reference: 'Benchmark' } }];
+    const result = compare_runs({ model_name: 'A', version: '1', dataset: 'A', metrics: { accuracy: 0.8 }, evidence_items: evidence }, { model_name: 'A', version: '2', dataset: 'B', metrics: { accuracy: 0.9 }, evidence_items: evidence });
+    expect(result.metrics_diff[0].comparison_status).toBe('different_dataset');
   });
 });
-

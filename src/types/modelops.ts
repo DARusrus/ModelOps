@@ -29,12 +29,6 @@ export type UIState =
 
 export type PreferredProvider = 'auto' | 'groq' | 'gemini' | 'offline';
 
-export interface UserApiKeys {
-  groqApiKey?: string;
-  geminiApiKey?: string;
-  preferredProvider?: PreferredProvider;
-}
-
 export interface MetricDefinition {
   name: string;
   value: number;
@@ -87,11 +81,14 @@ export interface ModelOpsInput {
   data_volume?: string;
   disaggregated_results?: string;
   subgroup_benchmarks?: string;
+  data_classification?: 'unclassified' | 'public' | 'internal' | 'confidential' | 'restricted';
   uses_sensitive_data?: boolean;
   impacts_human_life?: boolean;
   risks_and_harms?: string;
   mitigations?: string;
   recommendations?: string;
+  evidence_items?: import('@/domain/modelops/evidence').EvidenceItem[];
+  ai_suggestions?: import('@/domain/modelops/suggestion').SuggestionSet;
 }
 
 export interface MetricDiff {
@@ -100,6 +97,9 @@ export interface MetricDiff {
   run2_value: number;
   delta: number;
   direction: 'improved' | 'degraded' | 'unchanged';
+  comparison_status?: 'comparable' | 'not_measured' | 'incompatible_unit' | 'different_dataset' | 'not_comparable';
+  unit?: string;
+  reason?: string;
 }
 
 export interface GovernanceAuditEntry {
@@ -117,7 +117,9 @@ export interface GovernanceAuditEntry {
   signature_hash: string;
 }
 
-export interface ModelCardOutput {
+/** @deprecated Import ModelCardOutput from this module; it is derived from the canonical Zod contract. */
+interface LegacyModelCardOutput {
+  record_id?: string;
   model_name: string;
   version: string;
   dataset: string;
@@ -153,6 +155,7 @@ export interface ModelCardOutput {
     data_volume?: string;
     disaggregated_results?: string;
     subgroup_benchmarks?: string;
+    data_classification?: 'unclassified' | 'public' | 'internal' | 'confidential' | 'restricted';
     uses_sensitive_data?: boolean;
     impacts_human_life?: boolean;
     risks_and_harms?: string;
@@ -162,10 +165,17 @@ export interface ModelCardOutput {
     provider?: string;
   };
   evidence?: string[];
+  evidence_items?: import('@/domain/modelops/evidence').EvidenceItem[];
+  ai_suggestions?: import('@/domain/modelops/suggestion').SuggestionSet;
+  rubric_version?: string;
+  score_breakdown?: Record<string, number>;
+  workflow_state?: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'changes_requested';
   next_steps?: string[];
   ai_analysis?: string;
   audit_trail?: GovernanceAuditEntry[];
 }
+
+export type ModelCardOutput = import('@/domain/modelops/model-card').ModelCardOutput;
 
 export interface AIProviderResponse {
   raw_text: string;
@@ -193,7 +203,7 @@ export interface SimulatedGapItem {
   point_value: number;
   is_missing: boolean;
   field_key: keyof ModelOpsInput;
-  suggested_value: any;
+  suggested_value: string | string[] | Record<string, number>;
 }
 
 // 3. Governance Policy Interface

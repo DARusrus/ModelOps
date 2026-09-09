@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+vi.mock('../../src/lib/auth/actor', () => ({ requireDefaultActor: vi.fn().mockResolvedValue({ userId: 'user-1', organizationId: '00000000-0000-4000-8000-000000000001', role: 'admin' }) }));
+vi.mock('../../src/lib/supabase/server', () => ({ createSupabaseServerClient: vi.fn().mockResolvedValue({ rpc: vi.fn().mockResolvedValue({ data: true, error: null }) }) }));
 import { processModelOpsRequest } from '../../src/lib/modelops/service';
 import { validateInput } from '../../src/lib/modelops/validators';
-import { POST as comparePost } from '../../src/app/api/modelops/compare/route';
 import { ModelCardOutput } from '../../src/lib/modelops/schema';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,12 +126,12 @@ describe('End-to-End Workflow — Failure & Edge Cases', () => {
     expect(result.decision).toBe('pending_human_review');
   });
 
-  it('identical requests return equal results (LRU cache)', async () => {
+  it('identical deterministic requests return equivalent independent results', async () => {
     const metadata = validateInput({
       model_name: 'cache-test-model',
       version: '1.0.0',
       dataset: 'cache-dataset',
-      intended_use: 'Testing the LRU cache layer in service.ts',
+      intended_use: 'Testing deterministic evaluation behavior in service.ts',
       metrics: { accuracy: 0.99 },
     });
 
@@ -154,78 +155,5 @@ describe('End-to-End Workflow — Failure & Edge Cases', () => {
     const result = await processModelOpsRequest(metadata);
     // The AI must never set this to "approved" or "rejected"
     expect(result.decision).toBe('pending_human_review');
-  });
-});
-
-describe('End-to-End Workflow — Compare Endpoint', () => {
-  it('POST /api/modelops/compare with two valid runs → deterministic diff', async () => {
-    const payload = {
-      run1: {
-        model_name: 'Model-A',
-        metrics: { accuracy: 0.90, loss: 0.21 },
-      },
-      run2: {
-        model_name: 'Model-B',
-        metrics: { accuracy: 0.95, loss: 0.17 },
-      },
-    };
-
-    const request = new Request('http://localhost/api/modelops/compare', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const response = await comparePost(request);
-    expect(response.status).toBe(200);
-
-    const data = await response.json();
-    expect(data.success).toBe(true);
-    expect(data.comparison).toBeDefined();
-    expect(Array.isArray(data.comparison.metrics_diff)).toBe(true);
-    expect(typeof data.comparison.readiness_delta).toBe('number');
-
-    // accuracy improved: 0.95 > 0.90
-    const accDiff = data.comparison.metrics_diff.find(
-      (d: { metric_name: string }) => d.metric_name === 'accuracy'
-    );
-    expect(accDiff).toBeDefined();
-    expect(accDiff!.direction).toBe('improved');
-
-    // loss improved: lower is better, 0.17 < 0.21
-    const lossDiff = data.comparison.metrics_diff.find(
-      (d: { metric_name: string }) => d.metric_name === 'loss'
-    );
-    expect(lossDiff).toBeDefined();
-    expect(lossDiff!.direction).toBe('improved');
-  });
-
-  it('POST /api/modelops/compare with missing run2 → 400 validation error', async () => {
-    const payload = { run1: { model_name: 'Only-One-Run', metrics: { accuracy: 0.9 } } };
-
-    const request = new Request('http://localhost/api/modelops/compare', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const response = await comparePost(request);
-    expect(response.status).toBe(400);
-
-    const data = await response.json();
-    expect(data.success).toBe(false);
-    expect(data.error).toMatch(/Input validation failed/i);
-  });
-
-  it('POST /api/modelops/compare with invalid JSON → 400', async () => {
-    const request = new Request('http://localhost/api/modelops/compare', {
-      method: 'POST',
-      body: 'not-json-at-all',
-    });
-
-    const response = await comparePost(request);
-    expect(response.status).toBe(400);
-    const data = await response.json();
-    expect(data.success).toBe(false);
   });
 });

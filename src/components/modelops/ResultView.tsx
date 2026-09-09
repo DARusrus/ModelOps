@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ModelCardOutput, GovernanceAuditEntry } from '@/types/modelops';
+import { ModelCardOutput } from '@/types/modelops';
 import ReadinessScore from './ReadinessScore';
 import EvidencePanel from './EvidencePanel';
 import RunComparison from './RunComparison';
@@ -46,16 +46,8 @@ export default function ResultView({
   const activeCard = card || modelCard;
   const [activeTab, setActiveTab] = useState<TabKey>('dossier');
   const [showExport, setShowExport] = useState(false);
-  const [cardWithAudit, setCardWithAudit] = useState<ModelCardOutput>(activeCard as ModelCardOutput);
 
   if (!activeCard) return null;
-
-  const handleAuditLogUpdated = (trail: GovernanceAuditEntry[]) => {
-    setCardWithAudit({
-      ...activeCard,
-      audit_trail: trail,
-    });
-  };
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode; badge?: string }[] = [
     { key: 'dossier', label: 'Model Card Dossier', icon: <FileText className="w-4 h-4" /> },
@@ -74,7 +66,6 @@ export default function ResultView({
       key: 'policy',
       label: 'Policy & Audit Trail',
       icon: <ShieldCheck className="w-4 h-4 text-purple-600" />,
-      badge: cardWithAudit.audit_trail?.length ? `${cardWithAudit.audit_trail.length} Signed` : undefined,
     },
     { key: 'compare', label: 'Run Comparison Diff', icon: <GitCompare className="w-4 h-4" /> },
   ];
@@ -135,7 +126,7 @@ export default function ResultView({
 
       {/* Export Report Drawer */}
       {showExport && (
-        <ExportReport modelCard={cardWithAudit} onClose={() => setShowExport(false)} />
+        <ExportReport modelCard={activeCard} onClose={() => setShowExport(false)} />
       )}
 
       {/* 2. Navigation Tab Bar for Advanced Intelligence Features */}
@@ -291,7 +282,7 @@ export default function ResultView({
 
       {/* TAB CONTENT 4: POLICY & AUDIT TRAIL */}
       {activeTab === 'policy' && (
-        <PolicyAuditPanel currentCard={cardWithAudit} onAuditLogUpdated={handleAuditLogUpdated} />
+        <PolicyAuditPanel currentCard={activeCard} />
       )}
 
       {/* TAB CONTENT 5: RUN COMPARISON */}

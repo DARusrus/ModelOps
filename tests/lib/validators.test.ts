@@ -56,25 +56,30 @@ describe('parseAndValidateAIResponse', () => {
     expect(result.decision).toBe('pending_human_review');
   });
 
-  it('should extract JSON from markdown code fences', () => {
+  it('should not allow JSON in an AI response to replace submitted identity', () => {
     const markdownWrapped = '```json\n{"model_name": "Wrapped", "version": "2.0"}\n```';
 
     const result = parseAndValidateAIResponse(markdownWrapped, baseMetadata);
 
-    expect(result.model_name).toBe('Wrapped');
-    expect(result.version).toBe('2.0');
+    expect(result.model_name).toBe('TestModel');
+    expect(result.version).toBe('1.0.0');
   });
 
-  it('should sanitize non-numeric metric values', () => {
+  it('should not allow AI output to replace submitted metrics', () => {
     const jsonWithBadMetrics = JSON.stringify({
       metrics: { accuracy: 0.9, loss: 'not_a_number', precision: '0.88' },
     });
 
     const result = parseAndValidateAIResponse(jsonWithBadMetrics, baseMetadata);
 
-    expect(result.metrics.accuracy).toBe(0.9);
-    expect(result.metrics.precision).toBe(0.88); // Coerced from string
-    expect(result.metrics.loss).toBeUndefined(); // Non-numeric stripped
+    expect(result.metrics).toEqual(baseMetadata.metrics);
+  });
+
+  it('does not allow AI output to replace submitted governance facts', () => {
+    const result = parseAndValidateAIResponse(JSON.stringify({ risks: ['fabricated claim'], limitations: ['fabricated claim'], tests: ['fabricated claim'] }), { ...baseMetadata, risks: ['submitted risk'], limitations: ['submitted limitation'], tests: ['submitted test'] });
+    expect(result.risks).toEqual(['submitted risk']);
+    expect(result.limitations).toEqual(['submitted limitation']);
+    expect(result.tests).toEqual(['submitted test']);
   });
 
   it('should fill missing fields from metadata', () => {
@@ -99,11 +104,11 @@ describe('parseAndValidateAIResponse', () => {
     expect(result.decision).toBe('pending_human_review');
   });
 
-  it('should handle AI response with extra conversational text around JSON', () => {
+  it('should not allow conversational AI output to replace submitted identity', () => {
     const withPreamble = 'Sure! Here is the model card:\n```json\n{"model_name": "PreambleModel"}\n```\nLet me know if you need changes.';
 
     const result = parseAndValidateAIResponse(withPreamble, baseMetadata);
 
-    expect(result.model_name).toBe('PreambleModel');
+    expect(result.model_name).toBe('TestModel');
   });
 });

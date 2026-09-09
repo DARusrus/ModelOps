@@ -24,7 +24,6 @@ describe('Individual AI Providers', () => {
   describe('Groq Provider', () => {
 
     it('should parse successful JSON response', async () => {
-      process.env.GROQ_API_KEY = 'test-key';
       fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -32,14 +31,13 @@ describe('Individual AI Providers', () => {
         }),
       });
 
-      const result = await generateGroqResponse('test');
+      const result = await generateGroqResponse('test', 'test-key');
       expect(result.provider).toBe('groq');
       expect(result.raw_text).toBe('{"hello":"world"}');
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
     it('should retry on 503 error and succeed on second attempt', async () => {
-      process.env.GROQ_API_KEY = 'test-key';
       fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 503,
@@ -53,7 +51,7 @@ describe('Individual AI Providers', () => {
         }),
       });
 
-      const promise = generateGroqResponse('test');
+      const promise = generateGroqResponse('test', 'test-key');
 
       await vi.runAllTimersAsync();
 
@@ -63,7 +61,6 @@ describe('Individual AI Providers', () => {
     });
 
     it('should throw immediately on 401 Unauthorized (non-retryable)', async () => {
-      process.env.GROQ_API_KEY = 'test-key';
       fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 401,
@@ -71,7 +68,7 @@ describe('Individual AI Providers', () => {
         text: async () => 'Unauthorized',
       });
 
-      await expect(generateGroqResponse('test')).rejects.toMatchObject({
+      await expect(generateGroqResponse('test', 'test-key')).rejects.toMatchObject({
         status_code: 401,
       });
       expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -81,7 +78,6 @@ describe('Individual AI Providers', () => {
   describe('Gemini Provider', () => {
 
     it('should parse successful JSON response', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
       fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -89,13 +85,12 @@ describe('Individual AI Providers', () => {
         }),
       });
 
-      const result = await generateGeminiResponse('test');
+      const result = await generateGeminiResponse('test', 'test-key');
       expect(result.provider).toBe('gemini');
       expect(result.raw_text).toBe('{"hello":"gemini"}');
     });
 
     it('should handle missing text payload gracefully', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
       fetchMock.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -103,7 +98,7 @@ describe('Individual AI Providers', () => {
         }),
       });
 
-      await expect(generateGeminiResponse('test')).rejects.toMatchObject({
+      await expect(generateGeminiResponse('test', 'test-key')).rejects.toMatchObject({
         provider: 'gemini',
         message: expect.stringContaining('empty text payload'),
       });

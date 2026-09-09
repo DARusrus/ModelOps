@@ -12,6 +12,10 @@ export interface ModelTemplate {
   data: ModelOpsInput;
 }
 
+const EMPTY_MODEL_DRAFT: ModelOpsInput = {
+  model_name: '', version: '', dataset: '', intended_use: '', metrics: {}, limitations: [], risks: [], tests: [], reproducibility: '',
+};
+
 export const MODEL_TEMPLATES: ModelTemplate[] = [
   {
     id: 'blank',
@@ -35,7 +39,7 @@ export const MODEL_TEMPLATES: ModelTemplate[] = [
   {
     id: 'nlp-classifier',
     name: 'NLP classifier',
-    description: 'Pre-filled template for text classification & clinical triage models',
+    description: 'Classification guidance scaffold; no evidence is pre-filled',
     icon: MessageSquare,
     data: {
       model_name: 'RoBERTa-Clinical-Notes-Classifier',
@@ -56,7 +60,7 @@ export const MODEL_TEMPLATES: ModelTemplate[] = [
   {
     id: 'image-classifier',
     name: 'Image classifier',
-    description: 'Pre-filled template for computer vision & diagnostic radiology',
+    description: 'Vision-model guidance scaffold; no evidence is pre-filled',
     icon: ImageIcon,
     data: {
       model_name: 'ResNet50-Radiology-Scan-Triage',
@@ -77,7 +81,7 @@ export const MODEL_TEMPLATES: ModelTemplate[] = [
   {
     id: 'llm',
     name: 'Large language model',
-    description: 'Pre-filled template for generative AI & instruction pipelines',
+    description: 'Generative-AI guidance scaffold; no evidence is pre-filled',
     icon: Brain,
     data: {
       model_name: 'LLaMA-3-8B-Governance-Assistant',
@@ -98,7 +102,7 @@ export const MODEL_TEMPLATES: ModelTemplate[] = [
   {
     id: 'recommendation',
     name: 'Recommendation system',
-    description: 'Pre-filled template for recommendation & ranking engines',
+    description: 'Ranking-model guidance scaffold; no evidence is pre-filled',
     icon: ThumbsUp,
     data: {
       model_name: 'Two-Tower-Candidate-Retrieval-Engine',
@@ -119,7 +123,7 @@ export const MODEL_TEMPLATES: ModelTemplate[] = [
   {
     id: 'fraud-detection',
     name: 'Fraud detection',
-    description: 'Pre-filled template for transactional tabular risk models',
+    description: 'Risk-model guidance scaffold; no evidence is pre-filled',
     icon: Shield,
     data: {
       model_name: 'XGBoost-Realtime-Card-Fraud-Detector',
@@ -137,7 +141,11 @@ export const MODEL_TEMPLATES: ModelTemplate[] = [
       },
     },
   },
-];
+].map((template) => ({
+  ...template,
+  // An archetype chooses guidance only. It must never silently become evidence.
+  data: { ...EMPTY_MODEL_DRAFT },
+}));
 
 interface TemplateSelectorProps {
   activeTemplateId?: string;

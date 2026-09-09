@@ -26,7 +26,7 @@ describe('What Would It Take Simulator', () => {
     expect(repGap?.point_value).toBe(10);
   });
 
-  it('should calculate live score gain when gap toggles are turned on', () => {
+  it('does not manufacture evidence or a score gain when toggles are turned on', () => {
     const gaps = identifyModelGaps(incompleteCard);
     const gapIds = gaps.map((g) => g.id);
 
@@ -35,9 +35,8 @@ describe('What Would It Take Simulator', () => {
       gapIds
     );
 
-    expect(simulatedScore).toBeGreaterThan(incompleteCard.readiness_score);
-    expect(scoreGain).toBe(simulatedScore - incompleteCard.readiness_score);
-    expect(simulatedScore).toBe(100);
-    expect(simulatedCard.tests?.length).toBeGreaterThan(0);
+    expect(simulatedScore).toBe(incompleteCard.readiness_score);
+    expect(scoreGain).toBe(0);
+    expect(simulatedCard).toBe(incompleteCard);
   });
 });

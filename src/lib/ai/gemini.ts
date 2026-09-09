@@ -5,6 +5,7 @@ const GEMINI_API_URL =
   'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 300;
+const MAX_ERROR_BODY_LENGTH = 512;
 
 export async function generateGeminiResponse(
   prompt: string,
@@ -21,10 +22,13 @@ export async function generateGeminiResponse(
 
   while (attempt <= MAX_RETRIES) {
     try {
-      const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), env.AI_PROVIDER_TIMEOUT_MS);
+      const response = await fetch(GEMINI_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
         },
         body: JSON.stringify({
           contents: [
@@ -42,22 +46,23 @@ export async function generateGeminiResponse(
             responseMimeType: 'application/json',
           },
         }),
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
+        const errorText = (await response.text().catch(() => '')).slice(0, MAX_ERROR_BODY_LENGTH);
         const status = response.status;
         const isRetryable = status === 429 || status >= 500;
 
         const providerErr = new AIProviderErrorClass(
           'gemini',
-          `Gemini API failed with status ${status}: ${errorText}`,
+          `Gemini API failed with status ${status}${errorText ? '. Provider response omitted from client logs.' : ''}`,
           status
         );
 
         if (isRetryable && attempt < MAX_RETRIES) {
           attempt++;
-          const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+          const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 100);
           await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
@@ -82,13 +87,21 @@ export async function generateGeminiResponse(
       if (err instanceof AIProviderErrorClass) {
         throw err;
       }
+      if (attempt < MAX_RETRIES) {
+        attempt++;
+        await new Promise((resolve) => setTimeout(resolve, BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1)));
+        continue;
+      }
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new AIProviderErrorClass('gemini', 'Gemini request timed out', 504, true);
+      }
       break;
     }
   }
 
   throw new AIProviderErrorClass(
     'gemini',
-    lastError instanceof Error ? lastError.message : 'Unknown Gemini API failure',
+    'Gemini request failed',
     500
   );
 }

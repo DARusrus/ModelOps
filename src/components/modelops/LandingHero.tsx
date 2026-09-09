@@ -23,7 +23,7 @@ export default function LandingHero({ activeTemplateId, onSelectTemplate }: Land
         Model card generator
       </h1>
       <p className="text-sm sm:text-base text-gray-600 max-w-2xl mx-auto leading-relaxed mb-8">
-        Create standardized model documentation following Google and Microsoft formats. Choose a template below to open the generator, compute deterministic readiness scores, and get a professional model card ready for stakeholders.
+        Choose an archetype to open a blank evidence workspace with relevant guidance. Templates never prefill model facts, test results, or readiness evidence.
       </p>
 
       {/* 3. 6 Interactive Template Cards */}

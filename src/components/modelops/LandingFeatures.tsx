@@ -13,8 +13,8 @@ const FAQS = [
     a: 'ModelOps computes a deterministic score (0–100) across 5 weighted governance categories: Model Identity (10%), Dataset & Preprocessing (15%), Metric Validation & SLA Benchmarks (25%), Operational Risks & Ethical Guardrails (25%), and Reproducibility Integrity (25%). Scores dynamically respond to metric performance thresholds, mitigation completeness, and seed validity.',
   },
   {
-    q: 'How does the Bring-Your-Own-Key (BYOK) AI Engine work?',
-    a: 'You can insert your personal Groq API key (for ultra-fast LLaMA-3 LPU inference) or Google Gemini API key via the settings menu. Keys are kept strictly in your local browser storage, sent via encrypted headers, and never stored on server disks. If no keys are provided, the app operates 100% free using its deterministic offline synthesizer.',
+    q: 'How does the optional AI suggestion service work?',
+    a: 'Bring-your-own provider keys are not supported in this release. When an organization-managed AI provider is unavailable, ModelOps uses deterministic evaluation and clearly labels that no AI suggestion was produced.',
   },
   {
     q: 'Why is the Governance Decision always "Pending Human Review"?',
@@ -22,7 +22,7 @@ const FAQS = [
   },
   {
     q: 'Is my proprietary model data or dataset stored?',
-    a: 'No. ModelOps operates under a zero-retention privacy architecture. Evaluation metadata is processed in-memory, cached ephemerally in an LRU buffer for duplicate requests, and never permanently stored or used to train third-party models.',
+    a: 'Saved evaluations, evidence, and review attestations are stored in the organization workspace so they can be reviewed and exported. They are not used to train third-party models. Retention is governed by the workspace data policy.',
   },
 ];
 
@@ -61,9 +61,9 @@ export default function LandingFeatures() {
             <div className="w-10 h-10 rounded bg-emerald-50 border border-emerald-200 flex items-center justify-center text-[#13715B]">
               <Cpu className="w-5 h-5" />
             </div>
-            <h3 className="font-bold text-sm text-gray-900">BYOK AI Multi-Provider</h3>
+            <h3 className="font-bold text-sm text-gray-900">Controlled AI Suggestions</h3>
             <p className="text-xs text-gray-600 leading-relaxed">
-              Bring your own Groq or Gemini API keys, or run completely offline with our deterministic zero-cloud synthesizer.
+              Optional organization-managed AI suggestions are limited to declared public, non-sensitive evaluations. Deterministic evaluation remains available without external AI.
             </p>
           </div>
 

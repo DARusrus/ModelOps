@@ -5,6 +5,7 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const MODEL_NAME = 'llama-3.1-8b-instant';
 const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 300;
+const MAX_ERROR_BODY_LENGTH = 512;
 
 export async function generateGroqResponse(
   prompt: string,
@@ -21,6 +22,8 @@ export async function generateGroqResponse(
 
   while (attempt <= MAX_RETRIES) {
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), env.AI_PROVIDER_TIMEOUT_MS);
       const response = await fetch(GROQ_API_URL, {
         method: 'POST',
         headers: {
@@ -44,22 +47,23 @@ export async function generateGroqResponse(
           max_tokens: 1500,
           response_format: { type: 'json_object' },
         }),
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
 
       if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
+        const errorText = (await response.text().catch(() => '')).slice(0, MAX_ERROR_BODY_LENGTH);
         const status = response.status;
         const isRetryable = status === 429 || status >= 500;
 
         const providerErr = new AIProviderErrorClass(
           'groq',
-          `Groq API failed with status ${status}: ${errorText}`,
+          `Groq API failed with status ${status}${errorText ? '. Provider response omitted from client logs.' : ''}`,
           status
         );
 
         if (isRetryable && attempt < MAX_RETRIES) {
           attempt++;
-          const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+          const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 100);
           await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
@@ -84,13 +88,21 @@ export async function generateGroqResponse(
       if (err instanceof AIProviderErrorClass) {
         throw err;
       }
+      if (attempt < MAX_RETRIES) {
+        attempt++;
+        await new Promise((resolve) => setTimeout(resolve, BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1)));
+        continue;
+      }
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new AIProviderErrorClass('groq', 'Groq request timed out', 504, true);
+      }
       break;
     }
   }
 
   throw new AIProviderErrorClass(
     'groq',
-    lastError instanceof Error ? lastError.message : 'Unknown Groq API failure',
+    'Groq request failed',
     500
   );
 }

@@ -1,76 +1,82 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const actor = { userId: 'user-1', organizationId: '00000000-0000-4000-8000-000000000001', role: 'admin' };
+const baselineId = '00000000-0000-4000-8000-000000000010';
+const candidateId = '00000000-0000-4000-8000-000000000020';
+
+function savedCard(id: string, modelName: string, accuracy: number) {
+  return {
+    id,
+    payload: {
+      model_name: modelName,
+      version: '1.0.0',
+      dataset: 'benchmark',
+      metrics: { accuracy },
+      intended_use: 'validation',
+      readiness_score: 25,
+      decision: 'pending_human_review',
+      evidence_items: [],
+    },
+  };
+}
+
+function supabaseWith(records: unknown[]) {
+  const query = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    gt: vi.fn().mockResolvedValue({ data: records, error: null }),
+  };
+  return {
+    rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
+    from: vi.fn().mockReturnValue(query),
+    query,
+  };
+}
+
+const dependencies = vi.hoisted(() => ({ client: null as unknown as ReturnType<typeof supabaseWith> }));
+vi.mock('../../src/lib/auth/actor', () => ({ requireDefaultActor: vi.fn().mockResolvedValue({ userId: 'user-1', organizationId: '00000000-0000-4000-8000-000000000001', role: 'admin' }) }));
+vi.mock('../../src/lib/supabase/server', () => ({ createSupabaseServerClient: vi.fn().mockImplementation(async () => dependencies.client) }));
+
 import { POST } from '../../src/app/api/modelops/compare/route';
-import { MetricDiff } from '../../src/types';
 
 describe('POST /api/modelops/compare', () => {
-  it('should return 400 for invalid JSON body', async () => {
-    // Provide a request that throws on .json() (e.g. using a mock)
-    const request = new Request('http://localhost/api/modelops/compare', {
-      method: 'POST',
-      body: 'invalid-json',
-    });
+  beforeEach(() => { dependencies.client = supabaseWith([]); });
 
-    const response = await POST(request);
-    expect(response.status).toBe(400);
-
-    const data = await response.json();
-    expect(data.success).toBe(false);
-    expect(data.error).toMatch(/Invalid JSON payload/i);
+  it('rejects a non-JSON content type before parsing the body', async () => {
+    const response = await POST(new Request('http://localhost/api/modelops/compare', { method: 'POST', body: 'invalid-json' }));
+    expect(response.status).toBe(415);
+    expect((await response.json()).code).toBe('UNSUPPORTED_MEDIA_TYPE');
   });
 
-  it('should return 400 when missing required fields in payload', async () => {
-    const payload = {
-      run1: { model_name: 'A' },
-      // run2 is missing entirely
-    };
-
-    const request = new Request('http://localhost/api/modelops/compare', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const response = await POST(request);
+  it('rejects client-supplied run objects instead of treating them as authorized records', async () => {
+    const response = await POST(new Request('http://localhost/api/modelops/compare', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run1: { model_name: 'A' }, run2: { model_name: 'B' } }),
+    }));
     expect(response.status).toBe(400);
-
-    const data = await response.json();
-    expect(data.success).toBe(false);
-    expect(data.error).toMatch(/Input validation failed/i);
-    expect(Array.isArray(data.details)).toBe(true);
   });
 
-  it('should return 200 with valid payload', async () => {
-    const payload = {
-      run1: {
-        model_name: 'Model-A',
-        metrics: { accuracy: 0.90, latency: 100 },
-      },
-      run2: {
-        model_name: 'Model-B',
-        metrics: { accuracy: 0.95, latency: 120 },
-      },
-    };
-
-    const request = new Request('http://localhost/api/modelops/compare', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    const response = await POST(request);
+  it('loads both saved cards under the active organization before comparing them', async () => {
+    dependencies.client = supabaseWith([savedCard(baselineId, 'Model-A', 0.9), savedCard(candidateId, 'Model-B', 0.95)]);
+    const response = await POST(new Request('http://localhost/api/modelops/compare', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseline_id: baselineId, candidate_id: candidateId }),
+    }));
     expect(response.status).toBe(200);
-
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(dependencies.client.query.eq).toHaveBeenCalledWith('organization_id', actor.organizationId);
+    expect(dependencies.client.query.in).toHaveBeenCalledWith('id', [baselineId, candidateId]);
     const data = await response.json();
-    expect(data.success).toBe(true);
-    expect(data.comparison.readiness_delta).toBeDefined();
+    expect(data.comparison.metrics_diff.find((item: { metric_name: string }) => item.metric_name === 'accuracy').direction).toBe('improved');
+  });
 
-    // Verify that the metrics comparison exists
-    const diffs = data.comparison.metrics_diff;
-    expect(diffs).toBeDefined();
-    expect(diffs.length).toBeGreaterThan(0);
-    const accDiff = diffs.find((d: MetricDiff) => d.metric_name === 'accuracy');
-    expect(accDiff).toBeDefined();
-    expect(accDiff!.delta).toBeCloseTo(0.05);
-    expect(accDiff!.direction).toBe('improved'); // Assuming higher accuracy is improved
+  it('returns not found without revealing a cross-organization or expired record', async () => {
+    dependencies.client = supabaseWith([savedCard(baselineId, 'Model-A', 0.9)]);
+    const response = await POST(new Request('http://localhost/api/modelops/compare', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseline_id: baselineId, candidate_id: candidateId }),
+    }));
+    expect(response.status).toBe(404);
   });
 });

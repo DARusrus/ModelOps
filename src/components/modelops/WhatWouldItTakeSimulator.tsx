@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { ModelCardOutput, SimulatedGapItem } from '@/types/modelops';
 import { identifyModelGaps, simulateScoreWithToggles } from '@/lib/modelops/simulator';
-import { Zap, Sparkles, CheckCircle2, ArrowRight, ShieldCheck, Plus, Check, RotateCcw } from 'lucide-react';
+import { Zap, CheckCircle2, ArrowRight } from 'lucide-react';
 
 interface WhatWouldItTakeSimulatorProps {
   currentCard: ModelCardOutput;
@@ -16,7 +16,6 @@ export default function WhatWouldItTakeSimulator({
 }: WhatWouldItTakeSimulatorProps) {
   const gaps: SimulatedGapItem[] = identifyModelGaps(currentCard);
   const [selectedGaps, setSelectedGaps] = useState<string[]>([]);
-  const [appliedToast, setAppliedToast] = useState(false);
 
   const toggleGap = (id: string) => {
     setSelectedGaps((prev) =>
@@ -32,18 +31,13 @@ export default function WhatWouldItTakeSimulator({
     setSelectedGaps([]);
   };
 
-  const { simulatedScore, scoreGain, simulatedCard } = simulateScoreWithToggles(
+  const { simulatedScore, simulatedCard } = simulateScoreWithToggles(
     currentCard,
     selectedGaps
   );
 
-  const handleApply = () => {
-    if (onApplyFixes) {
-      onApplyFixes(simulatedCard);
-      setAppliedToast(true);
-      setTimeout(() => setAppliedToast(false), 2000);
-    }
-  };
+  void onApplyFixes;
+  void simulatedCard;
 
   const currentScore = currentCard.readiness_score || 0;
 
@@ -56,7 +50,7 @@ export default function WhatWouldItTakeSimulator({
             <span className="px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded text-[11px] font-bold uppercase tracking-wider font-mono">
               Actionable Gap Intelligence
             </span>
-            <span className="text-xs text-gray-500 font-mono">Live Score Recalculator</span>
+            <span className="text-xs text-gray-500 font-mono">Planning checklist — not an evidence-based score forecast</span>
           </div>
           <h3 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
             <Zap className="w-5 h-5 text-amber-500" />
@@ -108,35 +102,11 @@ export default function WhatWouldItTakeSimulator({
             </div>
           </div>
 
-          {/* Delta Pill */}
-          {scoreGain > 0 && (
-            <div className="px-3 py-1 bg-white border border-emerald-300 rounded font-mono font-bold text-xs text-[#13715B] shadow-2xs animate-scaleUp">
-              +{scoreGain} pts gain
-            </div>
-          )}
+          <div className="px-3 py-1 bg-white border border-amber-300 rounded font-mono font-bold text-xs text-amber-800 shadow-2xs">
+            Re-evaluate after evidence is supplied
+          </div>
         </div>
 
-        {/* Action Button to Apply to Form */}
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto justify-end">
-          <button
-            type="button"
-            onClick={handleApply}
-            disabled={selectedGaps.length === 0}
-            className="w-full sm:w-auto px-5 py-2.5 bg-[#13715B] hover:bg-[#0f5c49] disabled:opacity-40 text-white text-xs font-bold rounded shadow-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-          >
-            {appliedToast ? (
-              <>
-                <Check className="w-4 h-4" />
-                <span>Fixes Injected Into Wizard!</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span>Apply {selectedGaps.length} Fixes to Wizard & Re-evaluate</span>
-              </>
-            )}
-          </button>
-        </div>
       </div>
 
       {/* Gap Toggles List */}
@@ -145,14 +115,14 @@ export default function WhatWouldItTakeSimulator({
           <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider font-mono">
             Prospective Governance Fixes ({gaps.length} Gaps Detected)
           </h4>
-          <span className="text-[11px] text-gray-500">Toggle switches to preview point values</span>
+          <span className="text-[11px] text-gray-500">Toggle switches to plan work; they do not create evidence</span>
         </div>
 
         {gaps.length === 0 ? (
           <div className="p-6 bg-emerald-50 border border-emerald-200 rounded text-center text-xs text-gray-700 space-y-1">
             <CheckCircle2 className="w-6 h-6 text-[#13715B] mx-auto mb-2" />
             <div className="font-bold text-gray-900">Zero Governance Gaps Detected!</div>
-            <p className="text-gray-600">This model card has achieved full 100/100 readiness score coverage across all 5 categories.</p>
+            <p className="text-gray-600">No missing fields were detected by this checklist. It does not establish release readiness.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3">

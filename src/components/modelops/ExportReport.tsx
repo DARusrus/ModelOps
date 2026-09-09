@@ -53,6 +53,10 @@ ${activeCard.reproducibility}
   };
 
   const handleDownloadJSON = () => {
+    if (activeCard.record_id) {
+      window.location.assign(`/api/modelops/${activeCard.record_id}/export`);
+      return;
+    }
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(activeCard, null, 2));
     const downloadAnchor = document.createElement('a');
     downloadAnchor.setAttribute('href', dataStr);
@@ -110,7 +114,7 @@ ${activeCard.reproducibility}
       </div>
 
       <p className="text-xs text-gray-600 leading-relaxed">
-        Download structured metadata dossiers for integration into enterprise model registries, compliance archives, or regulatory filings (EU AI Act Technical Documentation, NIST AI RMF).
+        Saved cards download a server-generated dossier with the persisted workflow and review ledger. Unsaved previews can only be exported locally.
       </p>
 
       {/* Action Buttons Toolbar */}

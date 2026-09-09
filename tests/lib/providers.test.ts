@@ -10,6 +10,16 @@ vi.mock('../../src/lib/ai/gemini', () => ({
   generateGeminiResponse: vi.fn(),
 }));
 
+vi.mock('../../src/lib/ai/circuit-breaker', () => ({
+  assertProviderAvailable: vi.fn().mockResolvedValue(undefined),
+  recordProviderFailure: vi.fn().mockResolvedValue(undefined),
+  recordProviderSuccess: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/lib/ai/provider-concurrency', () => ({
+  withProviderConcurrencyLease: vi.fn(async (_provider: string, operation: () => Promise<unknown>) => operation()),
+}));
+
 import { generateGroqResponse } from '../../src/lib/ai/groq';
 import { generateGeminiResponse } from '../../src/lib/ai/gemini';
 
@@ -65,7 +75,7 @@ describe('generateWithFallback', () => {
     });
 
     await expect(generateWithFallback('test prompt')).rejects.toThrow(
-      /All AI Providers Failed/
+      /No configured AI provider is available/
     );
     expect(mockedGroq).toHaveBeenCalledOnce();
     expect(mockedGemini).toHaveBeenCalledOnce();

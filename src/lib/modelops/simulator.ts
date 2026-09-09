@@ -1,6 +1,16 @@
 import { ModelCardOutput, ModelOpsInput, SimulatedGapItem } from '@/types/modelops';
 import { readiness_score } from './tools';
 
+type SupplementaryGovernanceFields = {
+  data_split?: string;
+  eval_preprocessing?: string;
+  training_dataset?: string;
+  data_volume?: string;
+  risks_and_harms?: string;
+  mitigations?: string;
+  metadata?: SupplementaryGovernanceFields;
+};
+
 /**
  * Discovers potential gap items and prospective point values for a model card.
  */
@@ -36,8 +46,8 @@ export function identifyModelGaps(card: ModelCardOutput | ModelOpsInput): Simula
   }
 
   // 2. Dataset
-  const rawCard = card as any;
-  const meta = ('metadata' in card && card.metadata) ? (card.metadata as any) : {};
+  const rawCard = card as SupplementaryGovernanceFields;
+  const meta = rawCard.metadata ?? {};
 
   const hasDataset = Boolean(card.dataset && String(card.dataset).trim().length > 0);
   const hasInputShape = Boolean(
@@ -216,7 +226,8 @@ export function identifyModelGaps(card: ModelCardOutput | ModelOpsInput): Simula
 }
 
 /**
- * Calculates what the score would be if selected gap toggles are turned on.
+ * Returns a planning preview only. It must not manufacture evidence, alter the
+ * model card, or claim a future score before the user supplies and validates it.
  */
 export function simulateScoreWithToggles(
   originalCard: ModelCardOutput,
@@ -226,27 +237,13 @@ export function simulateScoreWithToggles(
   scoreGain: number;
   simulatedCard: ModelCardOutput;
 } {
-  const gaps = identifyModelGaps(originalCard);
-  const cloned: any = JSON.parse(JSON.stringify(originalCard));
-
-  for (const gap of gaps) {
-    if (selectedGapIds.includes(gap.id)) {
-      if (gap.field_key === 'metrics' && gap.suggested_value) {
-        cloned.metrics = { ...(cloned.metrics || {}), ...gap.suggested_value };
-      } else if (Array.isArray(gap.suggested_value)) {
-        cloned[gap.field_key] = gap.suggested_value;
-      } else {
-        cloned[gap.field_key] = gap.suggested_value;
-      }
-    }
-  }
-
-  const simulatedScore = readiness_score(cloned);
-  const scoreGain = Math.max(0, simulatedScore - (originalCard.readiness_score || 0));
+  void selectedGapIds;
+  const simulatedScore = originalCard.readiness_score || 0;
+  const scoreGain = 0;
 
   return {
     simulatedScore,
     scoreGain,
-    simulatedCard: cloned,
+    simulatedCard: originalCard,
   };
 }

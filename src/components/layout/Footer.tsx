@@ -85,7 +85,7 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <span className="text-gray-400">Model Inventory (Enterprise)</span>
+                <span className="text-gray-600">Model Inventory (Enterprise)</span>
               </li>
             </ul>
           </div>
@@ -119,7 +119,7 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <span className="text-gray-400">EU AI Act Statutory Rules</span>
+                <span className="text-gray-600">EU AI Act Statutory Rules</span>
               </li>
             </ul>
           </div>
@@ -140,7 +140,7 @@ export default function Footer() {
                 <span className="text-gray-600">Offline Metadata Synthesis</span>
               </li>
               <li>
-                <span className="text-gray-600">O(1) LRU In-Memory Cache</span>
+                <span className="text-gray-600">Shared database request controls</span>
               </li>
             </ul>
           </div>
@@ -176,7 +176,7 @@ export default function Footer() {
           <div className="flex items-center gap-4">
             <span className="text-gray-800 font-medium">English</span>
             <span className="text-gray-300">|</span>
-            <span className="text-gray-400">Zero Commercial Copyright Claim</span>
+            <span className="text-gray-600">Zero Commercial Copyright Claim</span>
           </div>
         </div>
       </div>
