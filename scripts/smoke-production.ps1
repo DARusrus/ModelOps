@@ -10,9 +10,11 @@ param(
   [switch]$UseVercelProtectionBypass
 )
 
+Add-Type -AssemblyName System.Net.Http
+
 $baseUrl = $AppUrl.TrimEnd('/')
 if ($baseUrl -match '(?i)(actual-deployment-url|your-vercel-domain)') {
-  throw 'Replace the example URL with the real Ready deployment URL shown in Vercel → Project → Deployments.'
+  throw 'Replace the example URL with the real Ready deployment URL shown in Vercel > Project > Deployments.'
 }
 $handler = [System.Net.Http.HttpClientHandler]::new()
 $handler.AllowAutoRedirect = $false
@@ -84,8 +86,8 @@ try {
   if ($bypassPointer -ne [IntPtr]::Zero) {
     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bypassPointer)
   }
-  $client.Dispose()
-  $handler.Dispose()
+  if ($null -ne $client) { $client.Dispose() }
+  if ($null -ne $handler) { $handler.Dispose() }
 }
 
 if ($failed) {
