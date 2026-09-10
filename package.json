@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:browser": "playwright test",
+    "test:performance": "playwright test --config playwright.performance.config.ts",
     "test:load-smoke": "node scripts/load-smoke.mjs"
   },
   "dependencies": {

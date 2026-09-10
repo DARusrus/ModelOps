@@ -7,7 +7,7 @@ export default defineConfig({
     globals: true,
     // Playwright owns the browser suite.  Keeping it out of Vitest prevents
     // two runners from loading incompatible test globals in one process.
-    exclude: ['**/node_modules/**', '**/dist/**', '**/.{idea,git,cache,output,temp}/**', 'tests/browser/**'],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.{idea,git,cache,output,temp}/**', 'tests/browser/**', 'tests/performance/**'],
   },
   resolve: {
     alias: {
