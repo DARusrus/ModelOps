@@ -119,6 +119,21 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
     expect(crossTenantRead.data).toBeNull();
   });
 
+  it('blocks the retired client-callable review RPC', async () => {
+    const owner = await signedInClient(fixture.userA);
+    const legacyReview = await owner.rpc('attest_model_card', {
+      target_card: fixture.cardAId,
+      requested_action: 'submitted',
+      requested_reason: 'This direct client mutation must be rejected.',
+    });
+    expect(legacyReview.error).not.toBeNull();
+    expect(legacyReview.data).toBeNull();
+
+    const unchanged = await fixture.admin.from('model_cards').select('workflow_state').eq('id', fixture.cardAId).single();
+    expect(unchanged.error).toBeNull();
+    expect(unchanged.data?.workflow_state).toBe('draft');
+  });
+
   it('physically purges expired governance records through the trusted retention function', async () => {
     const expiredAt = new Date(Date.now() - 60_000).toISOString();
     const expiredEvidence = await fixture.admin.from('evidence_items').insert({
