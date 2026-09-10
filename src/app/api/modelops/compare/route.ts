@@ -14,7 +14,9 @@ async function post(request: Request) {
     const actor = await requireDefaultActor('compare');
     const supabase = await createSupabaseServerClient();
     if (!await consumeSharedRateLimit(supabase, 'compare', 20, 60)) {
-      return createErrorResponse('Too Many Requests. Please try again later.', 429, undefined, 'RATE_LIMITED');
+      const response = createErrorResponse('Too Many Requests. Please try again later.', 429, undefined, 'RATE_LIMITED');
+      response.headers.set('Retry-After', '60');
+      return response;
     }
 
     const parsedRequest = await readJsonRequest(request);
@@ -54,7 +56,7 @@ async function post(request: Request) {
       comparison: comparisonResult,
     });
   } catch (error: unknown) {
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401);
+    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     if (error instanceof Error && error.message === 'RATE_LIMIT_UNAVAILABLE') return createErrorResponse('Request controls are temporarily unavailable', 503);
     if (error instanceof Error && ['FORBIDDEN', 'ORGANIZATION_SELECTION_REQUIRED'].includes(error.message)) return createErrorResponse('You are not authorized for this organization', 403);
     if (error instanceof ZodError) {

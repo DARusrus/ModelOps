@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { isAbortError, requestJson } from '@/lib/client/api';
 
 type Organization = { organization_id: string; role: string; name: string };
 
@@ -10,21 +11,19 @@ export default function SelectOrganizationPage() {
   const [submitting, setSubmitting] = useState('');
 
   useEffect(() => {
-    fetch('/api/organization/active', { cache: 'no-store' })
-      .then(async (response) => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || 'Organizations could not be loaded.');
+    const controller = new AbortController();
+    requestJson<{ organizations?: Organization[] }>('/api/organization/active', { cache: 'no-store', signal: controller.signal })
+      .then((body) => {
         setOrganizations(body.organizations || []);
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : 'Organizations could not be loaded.'));
+      .catch((cause) => { if (!isAbortError(cause)) setError(cause instanceof Error ? cause.message : 'Organizations could not be loaded.'); });
+    return () => controller.abort();
   }, []);
 
   const selectOrganization = async (organizationId: string) => {
     setSubmitting(organizationId); setError('');
     try {
-      const response = await fetch('/api/organization/active', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ organization_id: organizationId }) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || 'Organization could not be selected.');
+      await requestJson('/api/organization/active', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ organization_id: organizationId }) });
       window.location.assign('/modelops');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Organization could not be selected.');

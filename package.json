@@ -13,7 +13,8 @@
     "lint": "eslint src",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:load-smoke": "node scripts/load-smoke.mjs"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.73.0",

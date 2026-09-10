@@ -58,12 +58,18 @@ export const ReviewRequestSchema = z.object({
 export const OrganizationSelectionRequestSchema = z.object({ organization_id: UuidSchema }).strict();
 export const GovernanceUpdateRequestSchema = z.object({ review_mode: ReviewModeSchema }).strict();
 
-export const MetricDiffSchema = z.object({
+const ComparableMetricDiffSchema = z.object({
   metric_name: z.string(), run1_value: z.number(), run2_value: z.number(), delta: z.number(),
-  direction: z.enum(['improved', 'degraded', 'unchanged']),
-  comparison_status: z.enum(['comparable', 'not_measured', 'incompatible_unit', 'different_dataset', 'not_comparable']).optional(),
+  direction: z.enum(['improved', 'degraded', 'unchanged']), comparison_status: z.literal('comparable'),
   unit: z.string().optional(), reason: z.string().optional(),
 }).strict();
+const NonComparableMetricDiffSchema = z.object({
+  metric_name: z.string(), run1_value: z.number().nullable(), run2_value: z.number().nullable(), delta: z.null(),
+  direction: z.literal('unchanged'),
+  comparison_status: z.enum(['not_measured', 'incompatible_unit', 'different_dataset', 'not_comparable']),
+  unit: z.string().optional(), reason: z.string().min(1),
+}).strict();
+export const MetricDiffSchema = z.discriminatedUnion('comparison_status', [ComparableMetricDiffSchema, NonComparableMetricDiffSchema]);
 export type MetricDiff = z.infer<typeof MetricDiffSchema>;
 export const CompareRunsOutputSchema = z.object({
   model_name_1: z.string(), version_1: z.string(), model_name_2: z.string(), version_2: z.string(),

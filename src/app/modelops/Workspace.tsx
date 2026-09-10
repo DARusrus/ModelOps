@@ -15,6 +15,7 @@ import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { ModelTemplate } from '@/components/modelops/TemplateSelector';
 import { ResultViewSkeleton } from '@/components/modelops/Skeletons';
 import { ArrowLeft, RotateCcw, LayoutGrid, RefreshCw, SearchX } from 'lucide-react';
+import { ApiClientError, requestJson } from '@/lib/client/api';
 
 export default function ModelOpsWorkspace() {
   const [uiState, setUiState] = useState<UIState>('idle');
@@ -91,43 +92,28 @@ export default function ModelOpsWorkspace() {
     setResult(null);
 
     try {
-      const res = await fetch('/api/modelops', {
+      const data = await requestJson<ModelCardOutput>('/api/modelops', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
         body: JSON.stringify(input),
       });
-
-      if (!res.ok) {
-        if (res.status === 404) {
-          evaluationIdempotencyKey.current = null;
-          setUiState('empty');
-          return;
-        }
-
-        const errorData = await res.json().catch(() => ({ error: 'Evaluation service error' }));
-
-        if (res.status >= 500) {
-          setErrorMessage(errorData.error || `Server responded with status ${res.status}`);
-          setUiState('provider-error');
-        } else {
-          evaluationIdempotencyKey.current = null;
-          const details = Object.fromEntries(
-            (errorData.details || []).map((detail: { path: string; message: string }) => [detail.path, detail.message])
-          );
-          setFieldErrors(Object.keys(details).length > 0 ? details : {
-            _form: errorData.error || 'Please review the submitted data and try again.',
-          });
-          setUiState('idle');
-        }
-        return;
-      }
-
-      const data: ModelCardOutput = await res.json();
       evaluationIdempotencyKey.current = null;
       setResult(data);
       setSessionHistory((prev) => [data, ...prev.filter((item) => item.record_id !== data.record_id)]);
       setUiState('success');
     } catch (err: unknown) {
+      if (err instanceof ApiClientError && err.status === 404) {
+        evaluationIdempotencyKey.current = null;
+        setUiState('empty');
+        return;
+      }
+      if (err instanceof ApiClientError && err.status < 500 && err.status !== 408) {
+        evaluationIdempotencyKey.current = null;
+        const details = Object.fromEntries((err.details || []).map((detail) => [detail.path, detail.message]));
+        setFieldErrors(Object.keys(details).length > 0 ? details : { _form: err.message });
+        setUiState('idle');
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'Network error communicating with server.';
       setErrorMessage(msg);
       setUiState('provider-error');

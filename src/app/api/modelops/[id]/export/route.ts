@@ -23,7 +23,7 @@ async function get(_request: Request, context: { params: Promise<{ id: string }>
       headers: { 'Content-Type': 'application/json; charset=utf-8', 'Content-Disposition': `attachment; filename="model-card-${id}.json"`, 'Cache-Control': 'no-store' },
     });
   } catch (error) {
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401);
+    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     if (error instanceof Error && ['FORBIDDEN', 'ORGANIZATION_SELECTION_REQUIRED'].includes(error.message)) return createErrorResponse('You are not authorized for this organization', 403);
     logger.error('[API /api/modelops/[id]/export] Export failure', error);
     return createErrorResponse('Governance export could not be generated', 500);

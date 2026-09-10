@@ -12,7 +12,7 @@ import { parseStoredEvaluationSummaries } from '@/lib/modelops/stored-evaluation
 import { decodeEvaluationCursor, encodeEvaluationCursor, evaluationCursorFilter } from '@/lib/modelops/pagination';
 import { consumeSharedRateLimit } from '@/lib/shared-rate-limit';
 import { env } from '@/lib/env';
-import { abandonIdempotency, claimIdempotency, completeIdempotency, idempotencyKey, requestFingerprint } from '@/lib/idempotency';
+import { abandonIdempotency, claimIdempotency, idempotencyKey, requestFingerprint } from '@/lib/idempotency';
 
 async function post(request: Request) {
   let idempotency: { client: ReturnType<typeof createSupabaseAdminClient>; context: { organizationId: string; actorId: string; operation: string; key: string; fingerprint: string } } | undefined;
@@ -37,7 +37,9 @@ async function post(request: Request) {
     if (!await consumeSharedRateLimit(sessionClient, 'evaluate', 10, 60)) {
       await abandonIdempotency(persistenceClient, context);
       idempotency = undefined;
-      return createErrorResponse('Too Many Requests. Please try again later.', 429, undefined, 'RATE_LIMITED');
+      const response = createErrorResponse('Too Many Requests. Please try again later.', 429, undefined, 'RATE_LIMITED');
+      response.headers.set('Retry-After', '60');
+      return response;
     }
     // Reserve before an external call to keep the limit race-safe. A fallback
     // result releases this reservation below, so deterministic work is free.
@@ -55,25 +57,25 @@ async function post(request: Request) {
       quotaReserved = false;
     }
 
-    const { data: persisted, error: persistenceError } = await persistenceClient.from('model_cards').insert({
-      organization_id: actor.organizationId,
-      created_by: actor.userId,
-      payload: result,
-      readiness_score: result.readiness_score,
-      rubric_version: result.rubric_version || 'legacy',
-      workflow_state: 'draft',
-    }).select('id').single();
-    if (persistenceError) {
+    const { data: responseBody, error: persistenceError } = await persistenceClient.rpc('persist_model_card_idempotently', {
+      target_org: actor.organizationId,
+      requesting_actor: actor.userId,
+      target_operation: context.operation,
+      target_key: context.key,
+      target_fingerprint: context.fingerprint,
+      card_payload: result,
+      card_readiness_score: result.readiness_score,
+      card_rubric_version: result.rubric_version || 'legacy',
+    });
+    if (persistenceError || !responseBody) {
       logger.error('[API /api/modelops] Persistence failure', persistenceError);
       throw new Error('PERSISTENCE_UNAVAILABLE');
     }
-    const responseBody = { ...result, record_id: persisted.id };
-    await completeIdempotency(persistenceClient, context, 200, responseBody);
     idempotency = undefined;
     return createSuccessResponse(EvaluationCreateResponseSchema, responseBody);
   } catch (error: unknown) {
     if (idempotency) await abandonIdempotency(idempotency.client, idempotency.context);
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401);
+    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     if (error instanceof Error && error.message === 'IDEMPOTENCY_REQUIRED') return createErrorResponse('An Idempotency-Key UUID header is required for this action.', 400, undefined, 'IDEMPOTENCY_REQUIRED');
     if (error instanceof Error && error.message === 'IDEMPOTENCY_UNAVAILABLE') return createErrorResponse('Retry protection is temporarily unavailable.', 503);
     if (error instanceof Error && error.message === 'RATE_LIMIT_UNAVAILABLE') return createErrorResponse('Request controls are temporarily unavailable', 503);
@@ -148,7 +150,7 @@ async function get(request: Request) {
       return createErrorResponse('Saved evaluation data could not be validated', 500, undefined, 'INTERNAL_ERROR');
     }
   } catch (error) {
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401);
+    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     if (error instanceof Error && ['FORBIDDEN', 'ORGANIZATION_SELECTION_REQUIRED'].includes(error.message)) return createErrorResponse('You are not authorized for this organization', 403);
     logger.error('[API /api/modelops] Read authorization failure', error);
     return createErrorResponse('Saved evaluations could not be loaded', 500, undefined, 'INTERNAL_ERROR');

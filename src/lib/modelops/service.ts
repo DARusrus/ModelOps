@@ -7,6 +7,7 @@ import { logger } from '../logger';
 import { EvidenceItem, EvidenceItemSchema, RUBRIC_VERSION, scoreEvidence } from '@/domain/modelops/evidence';
 import { PROMPT_TEMPLATE_VERSION } from '../ai/prompts';
 import { env } from '../env';
+import { createAbortDeadline } from '@/lib/network/timeout';
 
 function submittedEvidence(metadata: ExperimentMetadata): EvidenceItem[] {
   const foundational: EvidenceItem[] = [
@@ -42,7 +43,9 @@ export async function processModelOpsRequest(
       );
     }
     const prompt = buildModelCardPrompt(evidenceItems);
-    const aiResult = await generateWithFallback(prompt, aiOptions);
+    const deadline = createAbortDeadline(env.AI_REQUEST_TIMEOUT_MS, aiOptions.signal);
+    const aiResult = await generateWithFallback(prompt, { ...aiOptions, signal: deadline.signal })
+      .finally(() => deadline.dispose());
     logger.info('[Service] AI generation completed', { provider: aiResult.provider });
     parsedCard = parseAndValidateAIResponse(aiResult.raw_text, metadata);
   } catch (error: unknown) {

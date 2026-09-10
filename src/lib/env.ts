@@ -16,7 +16,12 @@ const envSchema = z.object({
   // External model providers are opt-in. A configured key alone must never
   // cause potentially sensitive governance evidence to leave this service.
   AI_EGRESS_MODE: z.enum(['disabled', 'non_sensitive_only']).default('disabled'),
+  GROQ_MODEL: z.string().trim().min(1).max(120).default('openai/gpt-oss-20b'),
+  GEMINI_MODEL: z.string().trim().regex(/^[a-zA-Z0-9._-]+$/).max(120).default('gemini-3.6-flash'),
   AI_PROVIDER_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(8_000),
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(20_000),
+  DATABASE_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(500).max(30_000).default(5_000),
+  HEALTH_CACHE_TTL_MS: z.coerce.number().int().min(250).max(30_000).default(5_000),
   // Global shared bulkhead; tune from measured production traffic, never from
   // browser input. The default remains deliberately conservative.
   AI_PROVIDER_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),

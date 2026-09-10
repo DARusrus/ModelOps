@@ -6,8 +6,12 @@ vi.mock('../../src/lib/supabase/admin', () => ({ createSupabaseAdminClient: mock
 import { GET } from '../../src/app/api/health/route';
 
 describe('GET /api/health', () => {
+  let clock = Date.now();
+
   beforeEach(() => {
     vi.clearAllMocks();
+    clock += 6_000;
+    vi.spyOn(Date, 'now').mockReturnValue(clock);
     mocks.createAdminClient.mockReturnValue({ from: mocks.from });
     mocks.from.mockReturnValue({ select: mocks.select });
     mocks.select.mockReturnValue({ limit: mocks.limit });

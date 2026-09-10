@@ -92,4 +92,16 @@ describe('generateWithFallback', () => {
 
     expect(mockedGroq).toHaveBeenCalledWith('specific prompt text');
   });
+
+  it('does not start or fail over after the total request deadline is cancelled', async () => {
+    const deadline = new AbortController();
+    deadline.abort(new DOMException('Total deadline reached', 'TimeoutError'));
+
+    await expect(generateWithFallback('test prompt', { signal: deadline.signal })).rejects.toMatchObject({
+      status_code: 504,
+      is_timeout: true,
+    });
+    expect(mockedGroq).not.toHaveBeenCalled();
+    expect(mockedGemini).not.toHaveBeenCalled();
+  });
 });

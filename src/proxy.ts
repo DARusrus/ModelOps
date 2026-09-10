@@ -1,4 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
+import { env } from '@/lib/env';
+import { createTimeoutFetch } from '@/lib/network/timeout';
 
 function contentSecurityPolicy(nonce: string, isDevelopment: boolean) {
   const supabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -31,7 +34,7 @@ function contentSecurityPolicy(nonce: string, isDevelopment: boolean) {
  * Creates a request-scoped CSP nonce before React renders. Next reads the CSP
  * request header and applies the nonce to its framework-generated tags.
  */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const requestId = crypto.randomUUID();
   const isApiRequest = request.nextUrl.pathname.startsWith('/api/');
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
@@ -45,7 +48,29 @@ export function proxy(request: NextRequest) {
     requestHeaders.set('Content-Security-Policy', policy);
   }
 
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  const createResponse = () => NextResponse.next({ request: { headers: requestHeaders } });
+  let response = createResponse();
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (supabaseUrl && publishableKey) {
+    const supabase = createServerClient(supabaseUrl, publishableKey, {
+      global: { fetch: createTimeoutFetch(env.DATABASE_REQUEST_TIMEOUT_MS) },
+      cookies: {
+        getAll: () => request.cookies.getAll(),
+        setAll: (items) => {
+          items.forEach(({ name, value }) => request.cookies.set(name, value));
+          requestHeaders.set('cookie', request.cookies.toString());
+          response = createResponse();
+          items.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        },
+      },
+    });
+    // getClaims verifies the JWT and refreshes expired cookies when necessary.
+    // Authorization remains enforced inside pages and route handlers.
+    await supabase.auth.getClaims().catch(() => undefined);
+  }
+
   response.headers.set('X-Request-Id', requestId);
   if (!isApiRequest) response.headers.set('Content-Security-Policy', policy);
   return response;

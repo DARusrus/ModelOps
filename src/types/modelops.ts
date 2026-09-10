@@ -93,9 +93,9 @@ export interface ModelOpsInput {
 
 export interface MetricDiff {
   metric_name: string;
-  run1_value: number;
-  run2_value: number;
-  delta: number;
+  run1_value: number | null;
+  run2_value: number | null;
+  delta: number | null;
   direction: 'improved' | 'degraded' | 'unchanged';
   comparison_status?: 'comparable' | 'not_measured' | 'incompatible_unit' | 'different_dataset' | 'not_comparable';
   unit?: string;

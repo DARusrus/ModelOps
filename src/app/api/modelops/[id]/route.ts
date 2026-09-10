@@ -20,7 +20,7 @@ async function get(_: Request, context: { params: Promise<{ id: string }> }) {
     const evaluation = parseStoredEvaluations(data)[0];
     return createSuccessResponse(EvaluationDetailResponseSchema, { success: true, evaluation: { id: evaluation.id, ...evaluation.payload, workflow_state: data[0].workflow_state, created_at: evaluation.created_at, expires_at: evaluation.expires_at } });
   } catch (error) {
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401);
+    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     if (error instanceof Error && ['FORBIDDEN', 'ORGANIZATION_SELECTION_REQUIRED'].includes(error.message)) return createErrorResponse('You are not authorized for this organization', 403);
     if (error instanceof ZodError) return createErrorResponse('Saved evaluation ID is invalid', 400, undefined, 'VALIDATION_FAILED');
     logger.error('[API /api/modelops/[id]] Read failure', error);

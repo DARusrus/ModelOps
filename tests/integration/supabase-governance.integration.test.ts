@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const CONFIRMATION = 'RUN_ON_DISPOSABLE_TEST_PROJECT';
 const enabled = process.env.RUN_SUPABASE_INTEGRATION === 'true';
+const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
 type IntegrationConfig = {
   url: string;
@@ -188,12 +190,83 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
     expect(removedIdempotency.data).toBeNull();
   });
 
+  it('atomically persists one evaluation and replays it under concurrent idempotency claims', async () => {
+    const key = crypto.randomUUID();
+    const fingerprint = sha256(`integration-${crypto.randomUUID()}`);
+    const operation = 'evaluation.create';
+    const claimArgs = {
+      target_org: fixture.organizationAId,
+      requesting_actor: fixture.userA.id,
+      target_operation: operation,
+      target_key: key,
+      fingerprint,
+    };
+    const claims = await Promise.all(Array.from({ length: 12 }, () => fixture.admin.rpc('claim_idempotency', claimArgs)));
+    expect(claims.every((claim) => claim.error === null)).toBe(true);
+    expect(claims.filter((claim) => claim.data?.action === 'claimed')).toHaveLength(1);
+    expect(claims.filter((claim) => claim.data?.action === 'in_progress')).toHaveLength(11);
+
+    const payload = {
+      model_name: `Atomic integration ${key}`,
+      version: '1.0.0',
+      dataset: 'Atomic benchmark',
+      intended_use: 'Atomic persistence validation',
+      metrics: {},
+      readiness_score: 25,
+      decision: 'pending_human_review',
+      evidence_items: [],
+    };
+    const persisted = await fixture.admin.rpc('persist_model_card_idempotently', {
+      target_org: fixture.organizationAId,
+      requesting_actor: fixture.userA.id,
+      target_operation: operation,
+      target_key: key,
+      target_fingerprint: fingerprint,
+      card_payload: payload,
+      card_readiness_score: 25,
+      card_rubric_version: 'integration',
+    });
+    expect(persisted.error).toBeNull();
+    expect(persisted.data).toMatchObject({ model_name: payload.model_name, record_id: expect.any(String) });
+
+    const replay = await fixture.admin.rpc('claim_idempotency', claimArgs);
+    expect(replay.error).toBeNull();
+    expect(replay.data).toMatchObject({ action: 'replay', response_status: 200, response_body: { record_id: persisted.data.record_id } });
+    const stored = await fixture.admin.from('model_cards').select('id').eq('id', persisted.data.record_id);
+    expect(stored.error).toBeNull();
+    expect(stored.data).toHaveLength(1);
+  });
+
   it('enforces the full server-owned rejection workflow and verifies its ordered chain', async () => {
-    const submitted = await fixture.admin.rpc('attest_model_card_as', { requesting_actor: fixture.userA.id, target_card: fixture.cardAId, requested_action: 'submitted', requested_reason: 'integration submit', requested_policy_id: 'enterprise_general' });
+    const attest = async (action: 'submitted' | 'under_review' | 'rejected', reason: string) => {
+      const key = crypto.randomUUID();
+      const fingerprint = sha256(`${action}-${crypto.randomUUID()}`);
+      const operation = `review.${fixture.cardAId}`;
+      const claim = await fixture.admin.rpc('claim_idempotency', {
+        target_org: fixture.organizationAId, requesting_actor: fixture.userA.id,
+        target_operation: operation, target_key: key, fingerprint,
+      });
+      expect(claim.error).toBeNull();
+      expect(claim.data).toMatchObject({ action: 'claimed' });
+      return fixture.admin.rpc('attest_model_card_idempotently', {
+        target_org: fixture.organizationAId,
+        requesting_actor: fixture.userA.id,
+        target_card: fixture.cardAId,
+        requested_action: action,
+        requested_reason: reason,
+        requested_policy_id: 'enterprise_general',
+        target_operation: operation,
+        target_key: key,
+        target_fingerprint: fingerprint,
+        response_policy: { integration: true },
+      });
+    };
+    const submitted = await attest('submitted', 'integration submit');
     expect(submitted.error).toBeNull();
-    const underReview = await fixture.admin.rpc('attest_model_card_as', { requesting_actor: fixture.userA.id, target_card: fixture.cardAId, requested_action: 'under_review', requested_reason: 'integration review', requested_policy_id: 'enterprise_general' });
+    expect(submitted.data).toMatchObject({ success: true, workflow_state: 'submitted', attestation: { sequence_no: 1 } });
+    const underReview = await attest('under_review', 'integration review');
     expect(underReview.error).toBeNull();
-    const rejected = await fixture.admin.rpc('attest_model_card_as', { requesting_actor: fixture.userA.id, target_card: fixture.cardAId, requested_action: 'rejected', requested_reason: 'integration rejection', requested_policy_id: 'enterprise_general' });
+    const rejected = await attest('rejected', 'integration rejection');
     expect(rejected.error).toBeNull();
     const owner = await signedInClient(fixture.userA);
     const integrity = await owner.rpc('verify_model_card_attestations', { target_card: fixture.cardAId });

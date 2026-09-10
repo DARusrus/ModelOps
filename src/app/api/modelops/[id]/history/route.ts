@@ -21,7 +21,7 @@ async function get(_request: Request, context: { params: Promise<{ id: string }>
     if (integrityError) return createErrorResponse('Review integrity could not be verified', 503);
     return createSuccessResponse(ReviewHistoryResponseSchema, { success: true, workflow_state: card.workflow_state, governance_policy_id: card.governance_policy_id, history: (history ?? []).map(parseReviewAttestation), integrity });
   } catch (error) {
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401);
+    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     if (error instanceof Error && ['FORBIDDEN', 'ORGANIZATION_SELECTION_REQUIRED'].includes(error.message)) return createErrorResponse('You are not authorized for this organization', 403);
     logger.error('[API /api/modelops/[id]/history] Read failure', error);
     return createErrorResponse('Review history could not be loaded', 500);

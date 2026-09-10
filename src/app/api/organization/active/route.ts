@@ -25,7 +25,8 @@ async function get(request: Request) {
     const { memberships } = await authenticatedMemberships();
     return createSuccessResponse(ActiveOrganizationsResponseSchema, { success: true, organizations: memberships });
   } catch (error) {
-    return createErrorResponse(error instanceof Error && error.message === 'UNAUTHENTICATED' ? 'Authentication is required' : 'Organizations could not be loaded', error instanceof Error && error.message === 'UNAUTHENTICATED' ? 401 : 503);
+    const unauthenticated = error instanceof Error && error.message === 'UNAUTHENTICATED';
+    return createErrorResponse(unauthenticated ? 'Authentication is required' : 'Organizations could not be loaded', unauthenticated ? 401 : 503, undefined, unauthenticated ? 'UNAUTHENTICATED' : 'INTERNAL_ERROR');
   }
 }
 
@@ -41,7 +42,8 @@ async function post(request: Request) {
     return response;
   } catch (error) {
     if (error instanceof ZodError) return createErrorResponse('Organization selection is invalid', 400);
-    return createErrorResponse(error instanceof Error && error.message === 'UNAUTHENTICATED' ? 'Authentication is required' : 'Organization could not be selected', error instanceof Error && error.message === 'UNAUTHENTICATED' ? 401 : 503);
+    const unauthenticated = error instanceof Error && error.message === 'UNAUTHENTICATED';
+    return createErrorResponse(unauthenticated ? 'Authentication is required' : 'Organization could not be selected', unauthenticated ? 401 : 503, undefined, unauthenticated ? 'UNAUTHENTICATED' : 'INTERNAL_ERROR');
   }
 }
 

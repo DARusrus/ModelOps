@@ -6,15 +6,17 @@ import { withProviderConcurrencyLease } from './provider-concurrency';
 
 export interface GenerateOptions {
   preferredProvider?: PreferredProvider;
+  signal?: AbortSignal;
 }
 
-async function callProvider(provider: ProviderName, prompt: string): Promise<AIProviderResponse> {
+async function callProvider(provider: ProviderName, prompt: string, signal?: AbortSignal): Promise<AIProviderResponse> {
+  if (signal?.aborted) throw new AIProviderErrorClass(provider, 'AI request deadline exceeded', 504, true);
   await assertProviderAvailable(provider);
   return withProviderConcurrencyLease(provider, async () => {
     try {
       const result = provider === 'groq'
-        ? await generateGroqResponse(prompt)
-        : await generateGeminiResponse(prompt);
+        ? (signal ? await generateGroqResponse(prompt, undefined, signal) : await generateGroqResponse(prompt))
+        : (signal ? await generateGeminiResponse(prompt, undefined, signal) : await generateGeminiResponse(prompt));
       await recordProviderSuccess(provider);
       return result;
     } catch (error) {
@@ -31,16 +33,17 @@ export async function generateWithFallback(
   options?: GenerateOptions
 ): Promise<AIProviderResponse> {
   const preferred = options?.preferredProvider || 'auto';
+  const signal = options?.signal;
 
   // Provider secrets are server-owned. BYOK is intentionally not accepted at
   // this boundary until a separately approved vault-backed design exists.
   if (preferred === 'groq') {
-    return callProvider('groq', prompt);
+    return callProvider('groq', prompt, signal);
   }
 
   // 2. Explicit Gemini preference
   if (preferred === 'gemini') {
-    return callProvider('gemini', prompt);
+    return callProvider('gemini', prompt, signal);
   }
 
   // 3. Explicit Offline Synthesizer preference
@@ -50,10 +53,11 @@ export async function generateWithFallback(
 
   // 4. Auto failover (Groq -> Gemini)
   try {
-    return await callProvider('groq', prompt);
+    return await callProvider('groq', prompt, signal);
   } catch (groqError: unknown) {
+    if (signal?.aborted) throw new AIProviderErrorClass('groq', 'AI request deadline exceeded', 504, true);
     try {
-      return await callProvider('gemini', prompt);
+      return await callProvider('gemini', prompt, signal);
     } catch (geminiError: unknown) {
       void groqError;
       void geminiError;

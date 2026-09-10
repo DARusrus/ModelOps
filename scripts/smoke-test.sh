@@ -1,198 +1,60 @@
 #!/usr/bin/env bash
-# =============================================================================
-# ModelOps — Production Smoke Test Script
-# Owner: Ahmed Amir Rusrus (Integration Lead)
-# Required for: Final submission checklist S-11
-#
-# Usage:
-#   ./scripts/smoke-test.sh https://your-app.vercel.app
-#
-# The script runs all checks defined in docs/release-checklist.md §"Production
-# Smoke Tests" and docs/api-contracts.md. It exits with code 1 on the first
-# failure so CI can catch it.
-# =============================================================================
+# Cross-platform, unauthenticated production smoke test. This is intentionally
+# read-only: authenticated mutation coverage belongs to the Playwright suite.
+set -uo pipefail
 
-set -euo pipefail
-
-# ── Resolve production URL ────────────────────────────────────────────────────
-PROD_URL="${1:-}"
-if [ -z "$PROD_URL" ]; then
-  echo ""
-  echo "Usage: ./scripts/smoke-test.sh <PROD_URL>"
-  echo "  Example: ./scripts/smoke-test.sh https://modelops.vercel.app"
-  echo ""
-  exit 1
+BASE_URL="${1:-}"
+if [[ ! "$BASE_URL" =~ ^https://[^/]+/?$ ]]; then
+  echo "Usage: ./scripts/smoke-test.sh https://your-app.example"
+  exit 2
 fi
-
-# Strip trailing slash
-PROD_URL="${PROD_URL%/}"
-
-PASS=0
-FAIL=0
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-green()  { echo -e "\033[0;32m✅ PASS\033[0m  $1"; }
-red()    { echo -e "\033[0;31m❌ FAIL\033[0m  $1"; }
-header() { echo ""; echo "── $1 ──────────────────────────────────────────────"; }
+BASE_URL="${BASE_URL%/}"
+passed=0
+failed=0
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf -- "$tmp_dir"' EXIT
 
 check() {
-  local label="$1"
-  local result="$2"  # "pass" or "fail"
-  if [ "$result" = "pass" ]; then
-    green "$label"
-    PASS=$((PASS + 1))
+  if [[ "$1" == "true" ]]; then
+    printf 'PASS  %s\n' "$2"
+    passed=$((passed + 1))
   else
-    red "$label"
-    FAIL=$((FAIL + 1))
+    printf 'FAIL  %s\n' "$2" >&2
+    failed=$((failed + 1))
   fi
 }
 
-# ── Test 1: App loads (GET /) ─────────────────────────────────────────────────
-header "1. App loads"
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$PROD_URL")
-if [ "$HTTP_STATUS" = "200" ]; then
-  check "GET $PROD_URL → 200" "pass"
-else
-  check "GET $PROD_URL → expected 200, got $HTTP_STATUS" "fail"
-fi
+request() {
+  local method="$1" path="$2" headers="$3" body="$4"
+  curl --silent --show-error --max-time 15 --request "$method" \
+    --dump-header "$headers" --output "$body" --write-out '%{http_code}' \
+    -H 'Content-Type: application/json' "$BASE_URL$path"
+}
 
-# ── Test 2: POST /api/modelops with valid payload → 200 + ModelCardOutput ────
-header "2. POST /api/modelops — valid payload"
-VALID_PAYLOAD='{
-  "model_name": "smoke-test-model",
-  "version": "1.0.0",
-  "dataset": "smoke-test-dataset",
-  "intended_use": "Automated smoke test to verify the production deployment.",
-  "metrics": { "accuracy": 0.92 },
-  "tests": ["unit test"],
-  "reproducibility": "seed=42"
-}'
+health_status="$(request GET /api/health "$tmp_dir/health.headers" "$tmp_dir/health.body")" || health_status="000"
+check "$([[ "$health_status" == "200" ]] && echo true || echo false)" 'GET /api/health returns HTTP 200.'
+check "$(grep -Eq '"status"[[:space:]]*:[[:space:]]*"ok"' "$tmp_dir/health.body" && grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"' "$tmp_dir/health.body" && echo true || echo false)" 'Health response confirms database readiness.'
+check "$(grep -Eiq '^x-content-type-options:[[:space:]]*nosniff' "$tmp_dir/health.headers" && echo true || echo false)" 'Security header X-Content-Type-Options is present.'
+check "$(grep -Eiq '^x-request-id:[[:space:]]*[^[:space:]]+' "$tmp_dir/health.headers" && echo true || echo false)" 'Server generates a request correlation ID.'
 
-RESPONSE=$(curl -s -w "\n%{http_code}" \
-  -X POST "$PROD_URL/api/modelops" \
-  -H "Content-Type: application/json" \
-  -d "$VALID_PAYLOAD")
+login_status="$(request GET /login "$tmp_dir/login.headers" "$tmp_dir/login.body")" || login_status="000"
+check "$([[ "$login_status" == "200" ]] && echo true || echo false)" 'GET /login returns HTTP 200.'
+check "$(grep -Eiq "^content-security-policy:.*default-src 'self'" "$tmp_dir/login.headers" && echo true || echo false)" 'Login page has a Content Security Policy.'
+check "$(grep -Eiq '^strict-transport-security:[[:space:]]*.*max-age=' "$tmp_dir/login.headers" && echo true || echo false)" 'HTTPS transport security is enabled.'
 
-BODY=$(echo "$RESPONSE" | head -n -1)
-STATUS=$(echo "$RESPONSE" | tail -n 1)
+protected_status="$(request GET /modelops "$tmp_dir/protected.headers" "$tmp_dir/protected.body")" || protected_status="000"
+check "$([[ "$protected_status" =~ ^30[12378]$ ]] && echo true || echo false)" 'Unauthenticated GET /modelops redirects.'
+check "$(grep -Eiq '^location:[[:space:]]*(https://[^/]+)?/login([?[:space:]]|$)' "$tmp_dir/protected.headers" && echo true || echo false)" 'Protected-route redirect targets /login.'
 
-if [ "$STATUS" = "200" ]; then
-  check "POST /api/modelops valid payload → 200" "pass"
-else
-  check "POST /api/modelops valid payload → expected 200, got $STATUS" "fail"
-fi
+# No domain data is sent. A 401 proves mutations cannot be reached before auth.
+modelops_status="$(request POST /api/modelops "$tmp_dir/modelops.headers" "$tmp_dir/modelops.body")" || modelops_status="000"
+check "$([[ "$modelops_status" == "401" ]] && echo true || echo false)" 'Unauthenticated POST /api/modelops is rejected with HTTP 401.'
+compare_status="$(request POST /api/modelops/compare "$tmp_dir/compare.headers" "$tmp_dir/compare.body")" || compare_status="000"
+check "$([[ "$compare_status" == "401" ]] && echo true || echo false)" 'Unauthenticated POST /api/modelops/compare is rejected with HTTP 401.'
 
-# Verify success field
-if echo "$BODY" | grep -q '"success":true'; then
-  check "Response contains success:true" "pass"
-else
-  check "Response missing success:true — body: $BODY" "fail"
-fi
-
-# Verify decision is always pending_human_review (governance rule)
-if echo "$BODY" | grep -q '"decision":"pending_human_review"'; then
-  check "Governance rule: decision = pending_human_review" "pass"
-else
-  check "Governance rule VIOLATED: decision is not pending_human_review" "fail"
-fi
-
-# Verify readiness_score is present
-if echo "$BODY" | grep -q '"readiness_score"'; then
-  check "readiness_score field present in response" "pass"
-else
-  check "readiness_score field MISSING from response" "fail"
-fi
-
-# ── Test 3: POST /api/modelops with empty body → 400 ─────────────────────────
-header "3. POST /api/modelops — empty body → 400"
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-  -X POST "$PROD_URL/api/modelops" \
-  -H "Content-Type: application/json" \
-  -d '{}')
-
-if [ "$STATUS" = "400" ]; then
-  check "POST /api/modelops empty body → 400" "pass"
-else
-  check "POST /api/modelops empty body → expected 400, got $STATUS" "fail"
-fi
-
-# ── Test 4: POST /api/modelops with invalid JSON → 400 ───────────────────────
-header "4. POST /api/modelops — invalid JSON → 400"
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-  -X POST "$PROD_URL/api/modelops" \
-  -H "Content-Type: application/json" \
-  -d 'not-valid-json')
-
-if [ "$STATUS" = "400" ]; then
-  check "POST /api/modelops invalid JSON → 400" "pass"
-else
-  check "POST /api/modelops invalid JSON → expected 400, got $STATUS" "fail"
-fi
-
-# ── Test 5: POST /api/modelops/compare with two valid runs → 200 ─────────────
-header "5. POST /api/modelops/compare — valid payload"
-COMPARE_PAYLOAD='{
-  "run1": { "model_name": "Model-A", "metrics": { "accuracy": 0.90, "loss": 0.21 } },
-  "run2": { "model_name": "Model-B", "metrics": { "accuracy": 0.95, "loss": 0.17 } }
-}'
-
-RESPONSE=$(curl -s -w "\n%{http_code}" \
-  -X POST "$PROD_URL/api/modelops/compare" \
-  -H "Content-Type: application/json" \
-  -d "$COMPARE_PAYLOAD")
-
-BODY=$(echo "$RESPONSE" | head -n -1)
-STATUS=$(echo "$RESPONSE" | tail -n 1)
-
-if [ "$STATUS" = "200" ]; then
-  check "POST /api/modelops/compare valid payload → 200" "pass"
-else
-  check "POST /api/modelops/compare valid payload → expected 200, got $STATUS" "fail"
-fi
-
-if echo "$BODY" | grep -q '"metrics_diff"'; then
-  check "Compare response contains metrics_diff" "pass"
-else
-  check "Compare response missing metrics_diff — body: $BODY" "fail"
-fi
-
-# ── Test 6: POST /api/modelops/compare with missing run2 → 400 ───────────────
-header "6. POST /api/modelops/compare — missing run2 → 400"
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-  -X POST "$PROD_URL/api/modelops/compare" \
-  -H "Content-Type: application/json" \
-  -d '{"run1": {"model_name": "Only-One"}}')
-
-if [ "$STATUS" = "400" ]; then
-  check "POST /api/modelops/compare missing run2 → 400" "pass"
-else
-  check "POST /api/modelops/compare missing run2 → expected 400, got $STATUS" "fail"
-fi
-
-# ── Test 7: No API key visible in response headers ───────────────────────────
-header "7. Security — no secret in response headers"
-HEADERS=$(curl -s -I "$PROD_URL/api/modelops" 2>&1)
-
-if echo "$HEADERS" | grep -qi "GROQ_API_KEY\|GEMINI_API_KEY"; then
-  check "SECURITY FAIL: API key visible in response headers" "fail"
-else
-  check "No API key visible in response headers" "pass"
-fi
-
-# ── Summary ───────────────────────────────────────────────────────────────────
-echo ""
-echo "══════════════════════════════════════════════════"
-echo "  Smoke Test Results"
-echo "  URL: $PROD_URL"
-echo "  Passed: $PASS"
-echo "  Failed: $FAIL"
-echo "══════════════════════════════════════════════════"
-echo ""
-
-if [ "$FAIL" -gt 0 ]; then
-  echo "❌ $FAIL check(s) failed. Do not ship this build."
+printf '\nSmoke checks: %d passed, %d failed.\n' "$passed" "$failed"
+if (( failed > 0 )); then
+  echo 'Unauthenticated production smoke check failed. Do not promote this deployment.' >&2
   exit 1
-else
-  echo "✅ All checks passed. Production smoke test complete."
-  exit 0
 fi
+echo 'Unauthenticated production smoke check passed.'

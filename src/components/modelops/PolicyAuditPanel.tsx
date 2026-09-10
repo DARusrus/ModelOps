@@ -8,6 +8,7 @@ import {
   PolicyEvaluationResult,
 } from '@/lib/modelops/policy';
 import { clearStableReviewIdempotencyKey, stableReviewIdempotencyKey } from '@/lib/idempotency-client';
+import { ApiClientError, isAbortError, requestJson } from '@/lib/client/api';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -22,6 +23,7 @@ interface PolicyAuditPanelProps {
 
 interface ReviewEvent { id: string; action: string; reason: string; rubric_version: string; policy_id: string; previous_digest: string | null; digest: string; sequence_no?: number; digest_version?: string; created_at: string; }
 interface IntegrityResult { valid: boolean | null; checked_events: number; reason?: string; }
+type WorkflowState = NonNullable<ModelCardOutput['workflow_state']>;
 
 export default function PolicyAuditPanel({
   currentCard,
@@ -43,11 +45,10 @@ export default function PolicyAuditPanel({
 
   useEffect(() => {
     if (!currentCard.record_id) return;
+    const controller = new AbortController();
     const requestRevision = ++historyRevision.current;
-    fetch(`/api/modelops/${currentCard.record_id}/history`, { cache: 'no-store' })
-      .then(async (response) => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || 'Review history could not be loaded.');
+    requestJson<{ workflow_state: WorkflowState; governance_policy_id?: string; history?: ReviewEvent[]; integrity?: IntegrityResult }>(`/api/modelops/${currentCard.record_id}/history`, { cache: 'no-store', signal: controller.signal })
+      .then((body) => {
         if (historyRevision.current !== requestRevision) return;
         setWorkflowState(body.workflow_state);
         setSelectedPolicyId(body.governance_policy_id || 'enterprise_general');
@@ -55,28 +56,27 @@ export default function PolicyAuditPanel({
         setIntegrity(body.integrity || null);
       })
       .catch((error) => {
-        if (historyRevision.current === requestRevision) {
+        if (!isAbortError(error) && historyRevision.current === requestRevision) {
           setHistoryError(error instanceof Error ? error.message : 'Review history could not be loaded.');
         }
       });
+    return () => controller.abort();
   }, [currentCard.record_id]);
 
   useEffect(() => {
-    fetch('/api/organization/governance', { cache: 'no-store' })
-      .then(async (response) => {
-        const body = await response.json();
-        if (!response.ok) throw new Error(body.error || 'Review setting could not be loaded.');
+    const controller = new AbortController();
+    requestJson<{ review_mode: 'self_attestation' | 'independent_review'; can_manage: boolean }>('/api/organization/governance', { cache: 'no-store', signal: controller.signal })
+      .then((body) => {
         setReviewMode(body.review_mode); setCanManageReviewMode(body.can_manage);
       })
-      .catch((error) => setReviewModeError(error instanceof Error ? error.message : 'Review setting could not be loaded.'));
+      .catch((error) => { if (!isAbortError(error)) setReviewModeError(error instanceof Error ? error.message : 'Review setting could not be loaded.'); });
+    return () => controller.abort();
   }, []);
 
   const changeReviewMode = async (mode: 'self_attestation' | 'independent_review') => {
     setReviewModeError('');
     try {
-      const response = await fetch('/api/organization/governance', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_mode: mode }) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || 'Review setting could not be saved.');
+      const body = await requestJson<{ review_mode: 'self_attestation' | 'independent_review' }>('/api/organization/governance', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ review_mode: mode }) });
       setReviewMode(body.review_mode);
     } catch (error) { setReviewModeError(error instanceof Error ? error.message : 'Review setting could not be saved.'); }
   };
@@ -96,15 +96,7 @@ export default function PolicyAuditPanel({
     const retryScope = `${currentCard.record_id}.${action}.${selectedPolicyId}`;
     const requestKey = stableReviewIdempotencyKey(window.localStorage, retryScope);
     try {
-      const response = await fetch(`/api/modelops/${currentCard.record_id}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestKey }, body: JSON.stringify(requestBody) });
-      const body = await response.json();
-      if (!response.ok) {
-        if (body.code === 'IDEMPOTENCY_CONFLICT') {
-          clearStableReviewIdempotencyKey(window.localStorage, retryScope);
-          throw new Error('A previous retry for this action used different content. Review the result, then submit again if needed.');
-        }
-        throw new Error(body.error || 'Review action failed.');
-      }
+      const body = await requestJson<{ workflow_state: WorkflowState; attestation: ReviewEvent }>(`/api/modelops/${currentCard.record_id}/review`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': requestKey }, body: JSON.stringify(requestBody) });
       clearStableReviewIdempotencyKey(window.localStorage, retryScope);
       // Ignore a late initial history request; this response is the newest
       // server-confirmed state for the card.
@@ -114,7 +106,12 @@ export default function PolicyAuditPanel({
       setReason((currentReason) => currentReason === submittedReason ? '' : currentReason);
       setHistory((events) => [...events, body.attestation]);
       setIntegrity(null);
-    } catch (error) { setReviewError(error instanceof Error ? error.message : 'Review action failed.'); }
+    } catch (error) {
+      if (error instanceof ApiClientError && error.code === 'IDEMPOTENCY_CONFLICT') {
+        clearStableReviewIdempotencyKey(window.localStorage, retryScope);
+        setReviewError('A previous retry for this action used different content. Review the result, then submit again if needed.');
+      } else setReviewError(error instanceof Error ? error.message : 'Review action failed.');
+    }
     finally { setIsSubmitting(false); }
   };
 

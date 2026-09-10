@@ -77,9 +77,9 @@ describe('compare_runs — fixture-based coverage (Zein)', () => {
     const exp4 = findRecord('exp-004'); // has accuracy, f1
     const result = compare_runs(exp3, exp4);
     const f1Diff = result.metrics_diff.find((m) => m.metric_name === 'f1');
-    expect(f1Diff?.run1_value).toBeNaN();
+    expect(f1Diff?.run1_value).toBeNull();
     expect(f1Diff?.run2_value).toBe(0.83);
-    expect(f1Diff?.delta).toBeNaN();
+    expect(f1Diff?.delta).toBeNull();
     expect(f1Diff?.direction).toBe('unchanged');
     expect(f1Diff?.comparison_status).toBe('not_measured');
   });
@@ -89,7 +89,7 @@ describe('compare_runs — fixture-based coverage (Zein)', () => {
     const run2 = { model_name: 'A', version: '2', dataset: 'Benchmark', metrics: { latency: 0.1 }, evidence_items: [{ kind: 'metric', label: 'latency', reference: 'run-b', attributes: { unit: 's', evaluation_reference: 'Benchmark' } }] };
     const latency = compare_runs(run1, run2).metrics_diff[0];
     expect(latency.comparison_status).toBe('incompatible_unit');
-    expect(latency.delta).toBeNaN();
+    expect(latency.delta).toBeNull();
   });
 
   it('compares structured metrics only when the evaluation dataset is the same', () => {

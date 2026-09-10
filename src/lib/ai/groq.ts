@@ -1,15 +1,24 @@
 import { AIProviderResponse, AIProviderErrorClass } from '@/types/modelops';
 import { env } from '@/lib/env';
+import { abortableDelay, createAbortDeadline, type AbortDeadline } from '@/lib/network/timeout';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL_NAME = 'llama-3.1-8b-instant';
 const MAX_RETRIES = 2;
 const BASE_RETRY_DELAY_MS = 300;
 const MAX_ERROR_BODY_LENGTH = 512;
 
+async function waitBeforeRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+  try {
+    await abortableDelay(delayMs, signal);
+  } catch {
+    throw new AIProviderErrorClass('groq', 'Groq request deadline exceeded', 504, true);
+  }
+}
+
 export async function generateGroqResponse(
   prompt: string,
-  customApiKey?: string
+  customApiKey?: string,
+  signal?: AbortSignal
 ): Promise<AIProviderResponse> {
   const apiKey = customApiKey || env.GROQ_API_KEY;
 
@@ -21,9 +30,10 @@ export async function generateGroqResponse(
   let lastError: unknown = null;
 
   while (attempt <= MAX_RETRIES) {
+    let attemptDeadline: AbortDeadline | undefined;
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), env.AI_PROVIDER_TIMEOUT_MS);
+      if (signal?.aborted) throw signal.reason ?? new DOMException('Operation aborted', 'AbortError');
+      attemptDeadline = createAbortDeadline(env.AI_PROVIDER_TIMEOUT_MS, signal);
       const response = await fetch(GROQ_API_URL, {
         method: 'POST',
         headers: {
@@ -31,7 +41,7 @@ export async function generateGroqResponse(
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: MODEL_NAME,
+          model: env.GROQ_MODEL,
           messages: [
             {
               role: 'system',
@@ -47,8 +57,8 @@ export async function generateGroqResponse(
           max_tokens: 1500,
           response_format: { type: 'json_object' },
         }),
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeout));
+        signal: attemptDeadline.signal,
+      }).finally(() => attemptDeadline?.dispose());
 
       if (!response.ok) {
         const errorText = (await response.text().catch(() => '')).slice(0, MAX_ERROR_BODY_LENGTH);
@@ -64,7 +74,7 @@ export async function generateGroqResponse(
         if (isRetryable && attempt < MAX_RETRIES) {
           attempt++;
           const delay = BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 100);
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          await waitBeforeRetry(delay, signal);
           continue;
         }
 
@@ -80,20 +90,25 @@ export async function generateGroqResponse(
 
       return {
         provider: 'groq',
-        model_name: MODEL_NAME,
+        model_name: env.GROQ_MODEL,
         raw_text: content,
       };
     } catch (err: unknown) {
       lastError = err;
+      attemptDeadline?.dispose();
+      const timedOut = attemptDeadline?.didTimeout() === true;
+      if (signal?.aborted) {
+        throw new AIProviderErrorClass('groq', 'Groq request deadline exceeded', 504, true);
+      }
       if (err instanceof AIProviderErrorClass) {
         throw err;
       }
       if (attempt < MAX_RETRIES) {
         attempt++;
-        await new Promise((resolve) => setTimeout(resolve, BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1)));
+        await waitBeforeRetry(BASE_RETRY_DELAY_MS * Math.pow(2, attempt - 1), signal);
         continue;
       }
-      if (err instanceof DOMException && err.name === 'AbortError') {
+      if (timedOut || (err instanceof DOMException && ['AbortError', 'TimeoutError'].includes(err.name))) {
         throw new AIProviderErrorClass('groq', 'Groq request timed out', 504, true);
       }
       break;

@@ -198,9 +198,9 @@ export function compare_runs(
     if (typeof val1 !== 'number' || typeof val2 !== 'number') {
       return {
         metric_name: key,
-        run1_value: val1 ?? Number.NaN,
-        run2_value: val2 ?? Number.NaN,
-        delta: Number.NaN,
+        run1_value: val1 ?? null,
+        run2_value: val2 ?? null,
+        delta: null,
         direction: 'unchanged',
         comparison_status: 'not_measured',
         reason: 'The metric was not measured in both runs.',
@@ -209,9 +209,9 @@ export function compare_runs(
     const evidenceForRun1 = metricEvidence(evidence1, key);
     const evidenceForRun2 = metricEvidence(evidence2, key);
     if (usesStructuredEvidence) {
-      if (firstRun.dataset !== secondRun.dataset) return { metric_name: key, run1_value: val1, run2_value: val2, delta: Number.NaN, direction: 'unchanged', comparison_status: 'different_dataset', reason: 'The runs use different evaluation datasets.' };
-      if (!evidenceForRun1 || !evidenceForRun2 || !evidenceForRun1.attributes?.unit || !evidenceForRun2.attributes?.unit || !evidenceForRun1.reference || !evidenceForRun2.reference) return { metric_name: key, run1_value: val1, run2_value: val2, delta: Number.NaN, direction: 'unchanged', comparison_status: 'not_comparable', reason: 'Both runs need metric evidence with a unit and source reference.' };
-      if (evidenceForRun1.attributes.unit !== evidenceForRun2.attributes.unit) return { metric_name: key, run1_value: val1, run2_value: val2, delta: Number.NaN, direction: 'unchanged', comparison_status: 'incompatible_unit', reason: `Metric units differ (${evidenceForRun1.attributes.unit} vs ${evidenceForRun2.attributes.unit}).` };
+      if (firstRun.dataset !== secondRun.dataset) return { metric_name: key, run1_value: val1, run2_value: val2, delta: null, direction: 'unchanged', comparison_status: 'different_dataset', reason: 'The runs use different evaluation datasets.' };
+      if (!evidenceForRun1 || !evidenceForRun2 || !evidenceForRun1.attributes?.unit || !evidenceForRun2.attributes?.unit || !evidenceForRun1.reference || !evidenceForRun2.reference) return { metric_name: key, run1_value: val1, run2_value: val2, delta: null, direction: 'unchanged', comparison_status: 'not_comparable', reason: 'Both runs need metric evidence with a unit and source reference.' };
+      if (evidenceForRun1.attributes.unit !== evidenceForRun2.attributes.unit) return { metric_name: key, run1_value: val1, run2_value: val2, delta: null, direction: 'unchanged', comparison_status: 'incompatible_unit', reason: `Metric units differ (${evidenceForRun1.attributes.unit} vs ${evidenceForRun2.attributes.unit}).` };
     }
     const delta = val2 - val1;
     const directionDefinition = metricDirection(key);

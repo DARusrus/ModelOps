@@ -1,7 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { validateInput, CompareRequestSchema } from '../../src/lib/modelops/validators';
+import { validateInput, CompareRequestSchema, createErrorResponse } from '../../src/lib/modelops/validators';
 
 describe('ModelOps Validators', () => {
+  it('preserves an explicit authentication error code at the API boundary', async () => {
+    const response = createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      success: false,
+      code: 'UNAUTHENTICATED',
+      error: 'Authentication is required',
+    });
+  });
+
   describe('validateInput (ExperimentMetadataSchema)', () => {
     it('should pass with valid minimal input', () => {
       const validData = {

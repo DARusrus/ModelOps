@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { createErrorResponse, createSuccessResponse } from '@/lib/modelops/validators';
-import { parseReviewAttestation, PolicyBlockedResponseSchema, ReviewRequestSchema, ReviewResponseSchema, UuidSchema } from '@/domain/modelops/api-contracts';
+import { PolicyBlockedResponseSchema, ReviewRequestSchema, ReviewResponseSchema, UuidSchema } from '@/domain/modelops/api-contracts';
 import { requireDefaultActor } from '@/lib/auth/actor';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readJsonRequest, withRequestId } from '@/lib/http';
@@ -10,7 +10,7 @@ import { ModelCardOutputSchema } from '@/domain/modelops/model-card';
 import { evaluatePolicyCompliance } from '@/lib/modelops/policy';
 import { ModelCardOutput } from '@/types/modelops';
 import { mayApproveCard, type ReviewMode } from '@/lib/governance/review-mode';
-import { abandonIdempotency, claimIdempotency, completeIdempotency, idempotencyKey, requestFingerprint } from '@/lib/idempotency';
+import { abandonIdempotency, claimIdempotency, idempotencyKey, requestFingerprint } from '@/lib/idempotency';
 
 const IdSchema = UuidSchema;
 
@@ -49,7 +49,18 @@ async function post(request: Request, context: { params: Promise<{ id: string }>
     if (claim.action === 'conflict') return createErrorResponse('This idempotency key was already used for a different request.', 409, undefined, 'IDEMPOTENCY_CONFLICT');
     if (claim.action === 'in_progress') return createErrorResponse('An identical request is already being processed.', 409, undefined, 'OPERATION_IN_PROGRESS');
     idempotency = { client: supabase, context: requestContext };
-    const { data, error } = await supabase.rpc('attest_model_card_as', { requesting_actor: actor.userId, target_card: id, requested_action: body.action, requested_reason: body.reason, requested_policy_id: body.policy_id });
+    const { data, error } = await supabase.rpc('attest_model_card_idempotently', {
+      target_org: actor.organizationId,
+      requesting_actor: actor.userId,
+      target_card: id,
+      requested_action: body.action,
+      requested_reason: body.reason,
+      requested_policy_id: body.policy_id,
+      target_operation: requestContext.operation,
+      target_key: requestContext.key,
+      target_fingerprint: requestContext.fingerprint,
+      response_policy: policy,
+    });
     if (error) {
       logger.warn('[API /api/modelops/[id]/review] Attestation rejected', { code: error.code, message: error.message });
       if (error.message.includes('SELF_APPROVAL_FORBIDDEN')) throw new Error('REVIEW_SELF_APPROVAL_FORBIDDEN');
@@ -59,19 +70,13 @@ async function post(request: Request, context: { params: Promise<{ id: string }>
       if (error.message.includes('MODEL_CARD_NOT_FOUND')) throw new Error('REVIEW_NOT_FOUND');
       throw new Error('REVIEW_PERSISTENCE_UNAVAILABLE');
     }
-    // PostgREST serializes a function returning a composite row as a one-item
-    // array in some versions and as an object in others. Normalize that known
-    // transport difference before enforcing the public response DTO.
-    const rawAttestation = Array.isArray(data) ? data[0] : data;
-    if (!rawAttestation || (Array.isArray(data) && data.length !== 1)) throw new Error('REVIEW_RESPONSE_CONTRACT_VIOLATION');
-    const attestation = parseReviewAttestation(rawAttestation);
-    const responseBody = { success: true, attestation, workflow_state: body.action, policy };
-    await completeIdempotency(supabase, requestContext, 200, responseBody);
+    if (!data) throw new Error('REVIEW_RESPONSE_CONTRACT_VIOLATION');
+    const responseBody = ReviewResponseSchema.parse(data);
     idempotency = undefined;
     return createSuccessResponse(ReviewResponseSchema, responseBody);
   } catch (error) {
     if (idempotency) await abandonIdempotency(idempotency.client, idempotency.context);
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401);
+    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     if (error instanceof Error && error.message === 'IDEMPOTENCY_REQUIRED') return createErrorResponse('An Idempotency-Key UUID header is required for this action.', 400, undefined, 'IDEMPOTENCY_REQUIRED');
     if (error instanceof Error && error.message === 'IDEMPOTENCY_UNAVAILABLE') return createErrorResponse('Retry protection is temporarily unavailable.', 503);
     if (error instanceof Error && error.message === 'REVIEW_SELF_APPROVAL_FORBIDDEN') return createErrorResponse('Independent review is enabled: the card author cannot approve their own card.', 403, undefined, 'SELF_APPROVAL_FORBIDDEN');

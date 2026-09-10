@@ -15,7 +15,7 @@ async function get(request: Request) {
     if (error || !data) return createErrorResponse('Organization governance settings could not be loaded', 503);
     return createSuccessResponse(GovernanceResponseSchema, { success: true, review_mode: data.review_mode, can_manage: actor.role === 'admin' });
   } catch (error) {
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401);
+    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     return createErrorResponse('Organization governance settings could not be loaded', 403);
   }
 }
@@ -31,7 +31,7 @@ async function patch(request: Request) {
     if (error) return createErrorResponse('Organization governance settings could not be saved', 503);
     return createSuccessResponse(GovernanceUpdateResponseSchema, { success: true, review_mode: body.review_mode });
   } catch (error) {
-    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401);
+    if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     if (error instanceof Error && error.message === 'FORBIDDEN') return createErrorResponse('Only an organization administrator can change this setting.', 403);
     if (error instanceof ZodError) return createErrorResponse('Governance setting is invalid', 400);
     return createErrorResponse('Organization governance settings could not be saved', 500);
