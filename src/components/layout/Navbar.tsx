@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Shield, Sparkles, LogOut } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 
@@ -12,10 +13,12 @@ interface NavbarProps {
 export default function Navbar({
   onScrollToForm,
 }: NavbarProps) {
+  const router = useRouter();
   const signOut = async () => {
     const client = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
     await client.auth.signOut();
-    window.location.assign('/login');
+    router.replace('/login');
+    router.refresh();
   };
 
   return (

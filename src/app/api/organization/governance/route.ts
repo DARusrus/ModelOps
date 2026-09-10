@@ -7,7 +7,7 @@ import { readJsonRequest, withRequestId } from '@/lib/http';
 
 const GovernanceSchema = GovernanceUpdateRequestSchema;
 
-async function get(request: Request) {
+async function get() {
   try {
     const actor = await requireDefaultActor('read');
     const supabase = createSupabaseAdminClient();

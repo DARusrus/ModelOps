@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { BookOpen, ExternalLink, ShieldCheck, Scale, FileCode2 } from 'lucide-react';
+import { BookOpen, ExternalLink, ShieldCheck, Scale } from 'lucide-react';
 
 export default function GovernanceInfoCard() {
   return (

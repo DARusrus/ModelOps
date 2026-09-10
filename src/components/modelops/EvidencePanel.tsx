@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ModelCardOutput } from '@/types/modelops';
-import { ShieldCheck, Terminal, Bot, CheckCircle2, AlertTriangle, ListChecks } from 'lucide-react';
+import { ShieldCheck, Terminal, Bot, AlertTriangle, ListChecks } from 'lucide-react';
 
 interface EvidencePanelProps {
   modelCard: ModelCardOutput | null | undefined;

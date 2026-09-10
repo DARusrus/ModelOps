@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { isAbortError, requestJson } from '@/lib/client/api';
 
 type Organization = { organization_id: string; role: string; name: string };
 
 export default function SelectOrganizationPage() {
+  const router = useRouter();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState('');
@@ -24,7 +26,8 @@ export default function SelectOrganizationPage() {
     setSubmitting(organizationId); setError('');
     try {
       await requestJson('/api/organization/active', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ organization_id: organizationId }) });
-      window.location.assign('/modelops');
+      router.replace('/modelops');
+      router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Organization could not be selected.');
       setSubmitting('');

@@ -25,7 +25,7 @@ export function parseAndValidateAIResponse(
   let parsed: unknown;
   try {
     parsed = JSON.parse(cleaned);
-  } catch (err: unknown) {
+  } catch {
     logger.warn('[AI Validator] Failed to parse AI JSON output. Creating fallback structured response.');
     parsed = {};
   }

@@ -38,7 +38,7 @@ describe('readiness_score', () => {
 });
 describe('readiness_score — fixture-based coverage (Zein)', () => {
   function findRecord(id: string) {
-    const record = (sampleExperiments as any[]).find((r) => r.id === id);
+    const record = sampleExperiments.find((candidate) => candidate.id === id);
     if (!record) throw new Error(`Fixture ${id} not found`);
     return record;
   }
@@ -85,4 +85,3 @@ describe('readiness_score — fixture-based coverage (Zein)', () => {
     expect(readiness_score(injected)).toBe(readiness_score(normal));
   });
 });
-

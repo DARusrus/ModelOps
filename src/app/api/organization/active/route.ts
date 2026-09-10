@@ -20,7 +20,7 @@ async function authenticatedMemberships() {
   return { supabase, user, memberships: (memberships ?? []).map((membership) => ({ ...membership, name: names.get(membership.organization_id) ?? 'Organization' })) };
 }
 
-async function get(request: Request) {
+async function get() {
   try {
     const { memberships } = await authenticatedMemberships();
     return createSuccessResponse(ActiveOrganizationsResponseSchema, { success: true, organizations: memberships });

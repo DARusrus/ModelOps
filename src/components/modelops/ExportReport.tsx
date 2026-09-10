@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { ModelCardOutput } from '@/types/modelops';
-import { Download, Copy, Check, Printer, FileText, X, ShieldCheck } from 'lucide-react';
+import { Download, Copy, Check, Printer, FileText, X } from 'lucide-react';
 
 interface ExportReportProps {
   modelCard?: ModelCardOutput;
@@ -54,7 +54,9 @@ ${activeCard.reproducibility}
 
   const handleDownloadJSON = () => {
     if (activeCard.record_id) {
-      window.location.assign(`/api/modelops/${activeCard.record_id}/export`);
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.href = `/api/modelops/${activeCard.record_id}/export`;
+      downloadAnchor.click();
       return;
     }
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(activeCard, null, 2));

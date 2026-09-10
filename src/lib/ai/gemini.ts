@@ -27,8 +27,6 @@ export async function generateGeminiResponse(
   }
 
   let attempt = 0;
-  let lastError: unknown = null;
-
   while (attempt <= MAX_RETRIES) {
     let attemptDeadline: AbortDeadline | undefined;
     try {
@@ -92,7 +90,6 @@ export async function generateGeminiResponse(
         raw_text: text,
       };
     } catch (err: unknown) {
-      lastError = err;
       attemptDeadline?.dispose();
       const timedOut = attemptDeadline?.didTimeout() === true;
       if (signal?.aborted) {

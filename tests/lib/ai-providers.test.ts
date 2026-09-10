@@ -10,7 +10,7 @@ describe('Individual AI Providers', () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     fetchMock = vi.fn();
-    global.fetch = fetchMock as any;
+    vi.stubGlobal('fetch', fetchMock);
     vi.useFakeTimers();
   });
 
@@ -19,6 +19,7 @@ describe('Individual AI Providers', () => {
     vi.clearAllTimers();
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   describe('Groq Provider', () => {

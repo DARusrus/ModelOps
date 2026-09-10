@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldAlert, CheckCircle2, AlertTriangle, XCircle, Info } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 
 interface ReadinessScoreProps {
   score: number;

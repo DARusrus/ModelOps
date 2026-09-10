@@ -53,7 +53,7 @@ describe('compare_runs', () => {
 });
 describe('compare_runs — fixture-based coverage (Zein)', () => {
   function findRecord(id: string) {
-    const record = (sampleExperiments as any[]).find((r) => r.id === id);
+    const record = sampleExperiments.find((candidate) => candidate.id === id);
     if (!record) throw new Error(`Fixture ${id} not found`);
     return record;
   }

@@ -177,6 +177,7 @@ export default function ModelOpsWorkspace() {
                 {uiState !== 'success' && (
                   <div className="space-y-6">
                     <WizardForm
+                      key={activeTemplateId ?? 'custom'}
                       initialData={activeTemplateData}
                       onSubmit={handleFormSubmit}
                       isLoading={uiState === 'loading' || uiState === 'retry'}

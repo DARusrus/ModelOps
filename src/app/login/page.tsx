@@ -1,8 +1,10 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import { createTimeoutFetch } from '@/lib/network/timeout';
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [message, setMessage] = useState(''); const [submitting, setSubmitting] = useState(false);
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setSubmitting(true); setMessage('');
@@ -10,7 +12,8 @@ export default function LoginPage() {
       const client = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { global: { fetch: createTimeoutFetch(15_000) } });
       const { error } = await client.auth.signInWithPassword({ email, password });
       if (error) return setMessage('Sign-in failed. Check your email and password, then try again.');
-      window.location.assign('/modelops');
+      router.replace('/modelops');
+      router.refresh();
     } catch {
       setMessage('Sign-in is temporarily unavailable. Please try again.');
     } finally { setSubmitting(false); }

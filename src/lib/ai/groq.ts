@@ -27,8 +27,6 @@ export async function generateGroqResponse(
   }
 
   let attempt = 0;
-  let lastError: unknown = null;
-
   while (attempt <= MAX_RETRIES) {
     let attemptDeadline: AbortDeadline | undefined;
     try {
@@ -94,7 +92,6 @@ export async function generateGroqResponse(
         raw_text: content,
       };
     } catch (err: unknown) {
-      lastError = err;
       attemptDeadline?.dispose();
       const timedOut = attemptDeadline?.didTimeout() === true;
       if (signal?.aborted) {

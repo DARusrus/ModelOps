@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ShieldCheck, Cpu, Lock, HelpCircle, ChevronDown, CheckCircle2, FileText, ArrowRight, Activity } from 'lucide-react';
+import { ShieldCheck, Cpu, HelpCircle, ChevronDown, Activity } from 'lucide-react';
 
 const FAQS = [
   {

@@ -117,64 +117,6 @@ export interface GovernanceAuditEntry {
   signature_hash: string;
 }
 
-/** @deprecated Import ModelCardOutput from this module; it is derived from the canonical Zod contract. */
-interface LegacyModelCardOutput {
-  record_id?: string;
-  model_name: string;
-  version: string;
-  dataset: string;
-  metrics: Record<string, number>;
-  intended_use: string;
-  framework?: string;
-  task_type?: string;
-  input_shape?: string;
-  data_types?: string[];
-  limitations?: string[];
-  risks?: string[];
-  warnings?: string[];
-  tests?: string[];
-  reproducibility?: string;
-  readiness_score: number;
-  decision: 'pending_human_review';
-  metadata?: {
-    model_type?: string;
-    architecture?: string;
-    developed_by?: string;
-    release_date?: string;
-    license?: string;
-    primary_uses?: string;
-    out_of_scope_uses?: string;
-    target_users?: string;
-    factors?: string;
-    environment?: string;
-    decision_thresholds?: string;
-    variation_approaches?: string;
-    eval_preprocessing?: string;
-    data_split?: string;
-    training_dataset?: string;
-    data_volume?: string;
-    disaggregated_results?: string;
-    subgroup_benchmarks?: string;
-    data_classification?: 'unclassified' | 'public' | 'internal' | 'confidential' | 'restricted';
-    uses_sensitive_data?: boolean;
-    impacts_human_life?: boolean;
-    risks_and_harms?: string;
-    mitigations?: string;
-    recommendations?: string;
-    generated_at?: string;
-    provider?: string;
-  };
-  evidence?: string[];
-  evidence_items?: import('@/domain/modelops/evidence').EvidenceItem[];
-  ai_suggestions?: import('@/domain/modelops/suggestion').SuggestionSet;
-  rubric_version?: string;
-  score_breakdown?: Record<string, number>;
-  workflow_state?: 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'changes_requested';
-  next_steps?: string[];
-  ai_analysis?: string;
-  audit_trail?: GovernanceAuditEntry[];
-}
-
 export type ModelCardOutput = import('@/domain/modelops/model-card').ModelCardOutput;
 
 export interface AIProviderResponse {

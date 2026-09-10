@@ -1,17 +1,14 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ModelOpsInput } from '@/types/modelops';
 import {
   ChevronLeft,
   ChevronRight,
-  Sparkles,
   Info,
-  CheckCircle2,
   AlertTriangle,
   Plus,
   Trash2,
-  ShieldAlert,
   FileCheck,
   Zap
 } from 'lucide-react';
@@ -156,24 +153,6 @@ export default function WizardForm({
   const [metricKeyInput, setMetricKeyInput] = useState('');
   const [metricValInput, setMetricValInput] = useState('');
   const [submissionHint, setSubmissionHint] = useState('');
-
-  // Sync initialData changes when templates switch
-  useEffect(() => {
-    if (initialData) {
-      setFormData((prev) => ({
-        ...prev,
-        model_name: initialData.model_name || prev.model_name,
-        version: initialData.version || prev.version,
-        dataset: initialData.dataset || prev.dataset,
-        intended_use: initialData.intended_use || prev.intended_use,
-        metrics: initialData.metrics || prev.metrics,
-        limitations: typeof initialData.limitations === 'string' ? initialData.limitations : Array.isArray(initialData.limitations) ? initialData.limitations.join('. ') : prev.limitations,
-        risks_and_harms: typeof initialData.risks === 'string' ? initialData.risks : Array.isArray(initialData.risks) ? initialData.risks.join('. ') : prev.risks_and_harms,
-        reproducibility: initialData.reproducibility || prev.reproducibility,
-        disaggregated_results: typeof initialData.tests === 'string' ? initialData.tests : Array.isArray(initialData.tests) ? initialData.tests.join('. ') : prev.disaggregated_results,
-      }));
-    }
-  }, [initialData]);
 
   const updateField = <K extends keyof WizardFormData>(key: K, value: WizardFormData[K]) => {
     setFormData((prev) => ({ ...prev, [key]: value }));

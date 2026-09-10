@@ -1,5 +1,4 @@
 import { ModelCardOutput, ModelOpsInput, SimulatedGapItem } from '@/types/modelops';
-import { readiness_score } from './tools';
 
 type SupplementaryGovernanceFields = {
   data_split?: string;
