@@ -27,3 +27,11 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+      - name: Generate runtime dependency SBOM
+        run: npm sbom --omit=dev --sbom-format=cyclonedx > modelops-sbom.cdx.json
+      - name: Preserve runtime dependency SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: modelops-runtime-sbom-${{ github.sha }}
+          path: modelops-sbom.cdx.json
+          retention-days: 30

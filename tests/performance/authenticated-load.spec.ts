@@ -6,6 +6,12 @@ const enabled = process.env.RUN_MODELOPS_PERFORMANCE === 'true';
 const performanceDescribe = enabled ? test.describe : test.describe.skip;
 
 type Measurement = { operation: string; status: number; duration_ms: number; request_id: string | null };
+type OperationSummary = {
+  requests: number;
+  statuses: Record<string, number>;
+  missing_request_ids: number;
+  latency_ms: { p50: number | null; p95: number | null; p99: number | null; max: number };
+};
 
 function boundedSetting(name: string, fallback: number, minimum: number, maximum: number) {
   const value = Number(process.env[name] || fallback);
@@ -34,6 +40,18 @@ function summarize(measurements: Measurement[]) {
       latency_ms: { p50: percentile(durations, 50), p95: percentile(durations, 95), p99: percentile(durations, 99), max: Math.max(...durations) },
     }];
   }));
+}
+
+function enforceP95(summary: Record<string, OperationSummary>, operation: string, budgetMs: number) {
+  const p95 = summary[operation]?.latency_ms.p95;
+  expect(p95, `${operation} must produce a p95 measurement`).not.toBeNull();
+  expect(p95!, `${operation} p95 must remain within ${budgetMs}ms`).toBeLessThanOrEqual(budgetMs);
+}
+
+function enforceMax(summary: Record<string, OperationSummary>, operation: string, budgetMs: number) {
+  const maximum = summary[operation]?.latency_ms.max;
+  if (typeof maximum !== 'number') throw new Error(`${operation} must produce a maximum-latency measurement`);
+  expect(maximum, `${operation} maximum latency must remain within ${budgetMs}ms`).toBeLessThanOrEqual(budgetMs);
 }
 
 async function measured(operation: string, request: () => Promise<APIResponse>): Promise<{ response: APIResponse; measurement: Measurement }> {
@@ -79,8 +97,11 @@ performanceDescribe('authenticated bounded performance validation', () => {
   test('measures concurrent persistence, review, comparison, and short read stability without exceeding configured budgets', async ({ page }, testInfo) => {
     const createRequests = boundedSetting('MODELOPS_PERFORMANCE_CREATE_REQUESTS', 8, 2, 8);
     const concurrency = boundedSetting('MODELOPS_PERFORMANCE_CONCURRENCY', 4, 1, 8);
-    const stabilitySeconds = boundedSetting('MODELOPS_PERFORMANCE_STABILITY_SECONDS', 15, 10, 300);
+    const stabilitySeconds = boundedSetting('MODELOPS_PERFORMANCE_STABILITY_SECONDS', 15, 10, 1800);
     const readsPerSecond = boundedSetting('MODELOPS_PERFORMANCE_READS_PER_SECOND', 2, 1, 10);
+    const createMaxBudgetMs = boundedSetting('MODELOPS_PERFORMANCE_CREATE_MAX_BUDGET_MS', 6500, 100, 10_000);
+    const mutationMaxBudgetMs = boundedSetting('MODELOPS_PERFORMANCE_MUTATION_MAX_BUDGET_MS', 3000, 100, 10_000);
+    const readP95BudgetMs = boundedSetting('MODELOPS_PERFORMANCE_READ_P95_BUDGET_MS', 1000, 100, 10_000);
     const measurements: Measurement[] = [];
     await authenticate(page, fixture!);
 
@@ -140,14 +161,31 @@ performanceDescribe('authenticated bounded performance validation', () => {
       if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
     }
 
+    const results = summarize(measurements) as Record<string, OperationSummary>;
     const baseline = {
       generated_at: new Date().toISOString(),
-      workload: { create_requests: createRequests, review_records: reviewRecords, concurrency, stability_seconds: stabilitySeconds, reads_per_second: readsPerSecond },
-      results: summarize(measurements),
+      workload: {
+        create_requests: createRequests,
+        review_records: reviewRecords,
+        concurrency,
+        stability_seconds: stabilitySeconds,
+        reads_per_second: readsPerSecond,
+        latency_budgets_ms: { create_max: createMaxBudgetMs, mutation_max: mutationMaxBudgetMs, read_p95: readP95BudgetMs },
+      },
+      results,
     };
     const artifactPath = testInfo.outputPath('authenticated-performance-baseline.json');
     await writeFile(artifactPath, `${JSON.stringify(baseline, null, 2)}\n`, 'utf8');
     await testInfo.attach('authenticated-performance-baseline', { path: artifactPath, contentType: 'application/json' });
     console.log(`PERFORMANCE_BASELINE ${JSON.stringify(baseline)}`);
+
+    // Persist the evidence before enforcing the gate so a failed run retains
+    // every operation's measurements instead of only the first assertion.
+    enforceMax(results, 'create', createMaxBudgetMs);
+    enforceMax(results, 'compare', mutationMaxBudgetMs);
+    enforceMax(results, 'review.submitted', mutationMaxBudgetMs);
+    enforceMax(results, 'review.under_review', mutationMaxBudgetMs);
+    enforceMax(results, 'review.rejected', mutationMaxBudgetMs);
+    enforceP95(results, 'list', readP95BudgetMs);
   });
 });

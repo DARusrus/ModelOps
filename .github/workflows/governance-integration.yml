@@ -1,0 +1,66 @@
+name: Governance integration
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '43 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The disposable project is shared infrastructure. Serial execution prevents
+# one fixture cleanup from deleting another run's records.
+concurrency:
+  group: modelops-disposable-governance
+  cancel-in-progress: false
+
+jobs:
+  governance-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RUN_SUPABASE_INTEGRATION: 'true'
+      RUN_MODELOPS_BROWSER_E2E: 'true'
+      SUPABASE_INTEGRATION_CONFIRMATION: RUN_ON_DISPOSABLE_TEST_PROJECT
+      SUPABASE_INTEGRATION_URL: ${{ secrets.SUPABASE_INTEGRATION_URL }}
+      SUPABASE_INTEGRATION_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_INTEGRATION_PUBLISHABLE_KEY }}
+      SUPABASE_INTEGRATION_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_INTEGRATION_SERVICE_ROLE_KEY }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_INTEGRATION_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_INTEGRATION_PUBLISHABLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_INTEGRATION_SERVICE_ROLE_KEY }}
+      MODELOPS_BROWSER_E2E_BASE_URL: http://127.0.0.1:3100
+      AI_EGRESS_MODE: disabled
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Require disposable-project secrets
+        shell: bash
+        run: |
+          for name in SUPABASE_INTEGRATION_URL SUPABASE_INTEGRATION_PUBLISHABLE_KEY SUPABASE_INTEGRATION_SERVICE_ROLE_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Required repository secret $name is not configured."
+              exit 1
+            fi
+          done
+      - run: npm ci
+      - name: Validate database governance boundaries
+        run: npm run test:integration
+      - name: Install browser runtime
+        run: npx playwright install --with-deps chromium
+      - name: Validate authenticated browser workflow
+        run: npm run test:browser
+      - name: Preserve browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governance-browser-failure-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
