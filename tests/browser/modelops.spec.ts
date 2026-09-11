@@ -46,7 +46,7 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     await page.getByTitle('Jump to Evaluation data').click();
     await page.getByLabel('Evaluation benchmark dataset').fill('browser-e2e-benchmark');
     await page.getByRole('button', { name: 'Generate Model Card' }).click();
-    await expect(page.getByText('Browser validated model', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: /^Browser validated model v1\.0\.0$/ })).toBeVisible();
     await page.getByRole('button', { name: 'Policy & Audit Trail' }).click();
     await expect(page.getByRole('region', { name: 'Review attestation' })).toBeVisible();
     await page.getByLabel('Reason for this workflow action').fill('Browser workflow validation submission.');
@@ -94,7 +94,24 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     await page.getByTitle('Jump to Evaluation data').click();
     await page.getByLabel('Evaluation benchmark dataset').fill('browser-comparison-benchmark');
     await page.getByRole('button', { name: 'Generate Model Card' }).click();
-    await expect(page.getByText('Browser comparison candidate', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: /^Browser comparison candidate v1\.0\.1$/ })).toBeVisible();
+
+    // Persisted records must remain discoverable and reopenable after leaving
+    // their result view; this is organization history, not browser memory.
+    await page.getByRole('button', { name: 'Start New Model Evaluation' }).click();
+    await page.getByRole('button', { name: 'History', exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    const savedEvaluations = page.getByRole('table', { name: 'Saved evaluations' });
+    await expect(savedEvaluations).toBeVisible();
+    await savedEvaluations.getByRole('button', { name: 'Open evaluation Browser validated model 1.0.0' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: /^Browser validated model v1\.0\.0$/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Policy & Audit Trail' }).click();
+    await expect(page.getByText('Browser workflow validation rejection.')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Start New Model Evaluation' }).click();
+    await page.getByRole('button', { name: 'History', exact: true }).click();
+    await savedEvaluations.getByRole('button', { name: 'Open evaluation Browser comparison candidate 1.0.1' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: /^Browser comparison candidate v1\.0\.1$/ })).toBeVisible();
     await page.getByRole('button', { name: 'Run Comparison Diff' }).click();
     await expect(page.getByRole('region', { name: 'Authorized model comparison' })).toBeVisible();
     // The only saved baseline is selected by default. Resetting to the placeholder

@@ -16,6 +16,7 @@ import { ModelTemplate } from '@/components/modelops/TemplateSelector';
 import { ResultViewSkeleton } from '@/components/modelops/Skeletons';
 import { ArrowLeft, RotateCcw, LayoutGrid, RefreshCw, SearchX } from 'lucide-react';
 import { ApiClientError, requestJson } from '@/lib/client/api';
+import SavedEvaluations from '@/components/modelops/SavedEvaluations';
 
 export default function ModelOpsWorkspace() {
   const [uiState, setUiState] = useState<UIState>('idle');
@@ -24,6 +25,7 @@ export default function ModelOpsWorkspace() {
   const [result, setResult] = useState<ModelCardOutput | null>(null);
   const [lastInput, setLastInput] = useState<ModelOpsInput | null>(null);
   const [sessionHistory, setSessionHistory] = useState<ModelCardOutput[]>([]);
+  const [savedEvaluationsRefreshKey, setSavedEvaluationsRefreshKey] = useState(0);
   
   // Initially null so wizard is only revealed after user clicks a template button
   const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
@@ -31,6 +33,7 @@ export default function ModelOpsWorkspace() {
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
 
   const formRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
   const evaluationIdempotencyKey = useRef<string | null>(null);
 
   const scrollToForm = () => {
@@ -39,6 +42,8 @@ export default function ModelOpsWorkspace() {
       formRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 50);
   };
+
+  const scrollToHistory = () => historyRef.current?.scrollIntoView({ behavior: 'smooth' });
 
   const handleSelectTemplate = (template: ModelTemplate) => {
     setActiveTemplateId(template.id);
@@ -100,6 +105,7 @@ export default function ModelOpsWorkspace() {
       evaluationIdempotencyKey.current = null;
       setResult(data);
       setSessionHistory((prev) => [data, ...prev.filter((item) => item.record_id !== data.record_id)]);
+      setSavedEvaluationsRefreshKey((value) => value + 1);
       setUiState('success');
     } catch (err: unknown) {
       if (err instanceof ApiClientError && err.status === 404) {
@@ -129,12 +135,25 @@ export default function ModelOpsWorkspace() {
     }
   };
 
+  const handleOpenSavedEvaluation = (evaluation: ModelCardOutput) => {
+    setResult(evaluation);
+    setSessionHistory((current) => [evaluation, ...current.filter((item) => item.record_id !== evaluation.record_id)]);
+    setActiveTemplateId('saved-evaluation');
+    setActiveTemplateData(null);
+    setIsWizardOpen(true);
+    setErrorMessage('');
+    setFieldErrors({});
+    setUiState('success');
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+  };
+
   return (
     <ErrorBoundary fallbackTitle="ModelOps Portal Exception" fallbackMessage="An isolated error occurred while rendering the evaluation interface.">
       <div className="min-h-screen flex flex-col bg-[#FAFAFA] text-gray-900 font-sans antialiased">
         {/* Navigation Bar */}
         <Navbar
           onScrollToForm={scrollToForm}
+          onScrollToHistory={scrollToHistory}
         />
 
         {/* Main Application Container */}
@@ -148,6 +167,10 @@ export default function ModelOpsWorkspace() {
               activeTemplateId={activeTemplateId}
               onSelectTemplate={handleSelectTemplate}
             />
+
+            <div ref={historyRef}>
+              <SavedEvaluations refreshKey={savedEvaluationsRefreshKey} onOpen={handleOpenSavedEvaluation} />
+            </div>
 
             {/* Generator Wizard Section: ONLY appears when a template button is clicked! */}
             {isWizardOpen && (

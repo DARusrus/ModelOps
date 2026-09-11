@@ -3,15 +3,17 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Shield, Sparkles, LogOut } from 'lucide-react';
+import { History, Shield, Sparkles, LogOut } from 'lucide-react';
 import { createBrowserClient } from '@supabase/ssr';
 
 interface NavbarProps {
   onScrollToForm?: () => void;
+  onScrollToHistory?: () => void;
 }
 
 export default function Navbar({
   onScrollToForm,
+  onScrollToHistory,
 }: NavbarProps) {
   const router = useRouter();
   const signOut = async () => {
@@ -71,6 +73,12 @@ export default function Navbar({
 
         {/* Right CTA & Settings Actions */}
         <div className="flex items-center gap-2.5">
+          {onScrollToHistory && (
+            <button type="button" onClick={onScrollToHistory} className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
+              <History className="w-3.5 h-3.5" />
+              <span>History</span>
+            </button>
+          )}
           {onScrollToForm && (
             <button
               type="button"
