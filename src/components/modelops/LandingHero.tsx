@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ModelTemplate, MODEL_TEMPLATES } from './TemplateSelector';
+import { ModelTemplate, MODEL_TEMPLATES } from './model-templates';
 import { Sparkles } from 'lucide-react';
 
 interface LandingHeroProps {

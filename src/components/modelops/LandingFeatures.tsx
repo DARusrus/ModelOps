@@ -18,7 +18,7 @@ const FAQS = [
   },
   {
     q: 'Why is the Governance Decision always "Pending Human Review"?',
-    a: 'In compliance with EU AI Act Article 14 (Human Oversight) and NIST AI RMF standards, automated AI systems cannot self-approve deployment into production. ModelOps enforces a strict human-in-the-loop invariant where automated pipelines provide evidence, while human governance officers retain sole sign-off authority.',
+    a: 'ModelOps keeps automated evaluation separate from human approval. The pipeline organizes evidence and computes readiness signals, while an authorized organization member records the review decision.',
   },
   {
     q: 'Is my proprietary model data or dataset stored?',
@@ -42,7 +42,7 @@ export default function LandingFeatures() {
             Why Enterprise Teams Use ModelOps
           </h2>
           <p className="text-xs sm:text-sm text-gray-600">
-            Standardized compliance automation and deterministic verification for production AI systems.
+            Structured governance workflows and deterministic evaluation for production AI systems.
           </p>
         </div>
 
@@ -86,7 +86,7 @@ export default function LandingFeatures() {
             How The Generator Works
           </h3>
           <p className="text-xs text-gray-600">
-            From model specification to standardized compliance documentation in seconds.
+            From model specification to structured governance documentation in one workflow.
           </p>
         </div>
 

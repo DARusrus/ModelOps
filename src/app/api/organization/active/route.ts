@@ -3,9 +3,9 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createErrorResponse, createSuccessResponse } from '@/lib/modelops/validators';
 import { ActiveOrganizationResponseSchema, ActiveOrganizationsResponseSchema, OrganizationSelectionRequestSchema } from '@/domain/modelops/api-contracts';
 import { readJsonRequest, withRequestId } from '@/lib/http';
+import { ACTIVE_ORGANIZATION_COOKIE, activeOrganizationCookieOptions } from '@/lib/auth/active-organization';
 
 const SelectionSchema = OrganizationSelectionRequestSchema;
-const cookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 60 * 60 * 24 * 30 };
 
 async function authenticatedMemberships() {
   const supabase = await createSupabaseServerClient();
@@ -38,7 +38,7 @@ async function post(request: Request) {
     const { memberships } = await authenticatedMemberships();
     if (!memberships.some((membership) => membership.organization_id === body.organization_id)) return createErrorResponse('You are not a member of this organization', 403);
     const response = createSuccessResponse(ActiveOrganizationResponseSchema, { success: true, organization_id: body.organization_id });
-    response.cookies.set('modelops-active-organization', body.organization_id, cookieOptions);
+    response.cookies.set(ACTIVE_ORGANIZATION_COOKIE, body.organization_id, activeOrganizationCookieOptions);
     return response;
   } catch (error) {
     if (error instanceof ZodError) return createErrorResponse('Organization selection is invalid', 400);

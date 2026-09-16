@@ -18,7 +18,7 @@ export default function GovernanceInfoCard() {
             </span>
           </h3>
           <p className="text-sm text-gray-600 mb-3 leading-relaxed">
-            Model cards are standardized technical dossiers providing transparency, reproducibility parameters, quantitative evaluations, limitations, and ethical considerations for production machine learning models. First introduced by Google Research in 2019, they are now standard for EU AI Act compliance, NIST AI RMF auditing, and enterprise model governance.
+            Model cards are structured technical dossiers for recording intended use, evaluation results, limitations, risks, and reproducibility information. They can support an organization’s governance process, but a generated card does not establish regulatory compliance or certification.
           </p>
 
           <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-gray-700 pt-1">
@@ -36,7 +36,7 @@ export default function GovernanceInfoCard() {
 
             <div className="flex items-center gap-1 text-gray-600">
               <ShieldCheck className="w-3.5 h-3.5 text-[#13715B]" />
-              EU AI Act Article 13 Compliant
+              Internal governance aid
             </div>
 
             <span className="text-gray-300">|</span>

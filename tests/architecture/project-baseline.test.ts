@@ -1,0 +1,94 @@
+import { readFileSync } from 'node:fs';
+import { readdir, stat } from 'node:fs/promises';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { MODEL_TEMPLATES } from '../../src/components/modelops/model-templates';
+
+const root = process.cwd();
+
+const pageRoutes = [
+  ['/', 'src/app/page.tsx'],
+  ['/login', 'src/app/login/page.tsx'],
+  ['/signup', 'src/app/signup/page.tsx'],
+  ['/signup/check-email', 'src/app/signup/check-email/page.tsx'],
+  ['/forgot-password', 'src/app/forgot-password/page.tsx'],
+  ['/reset-password', 'src/app/reset-password/page.tsx'],
+  ['/modelops', 'src/app/modelops/page.tsx'],
+  ['/onboarding', 'src/app/onboarding/page.tsx'],
+  ['/select-organization', 'src/app/select-organization/page.tsx'],
+  ['/forbidden', 'src/app/forbidden/page.tsx'],
+] as const;
+
+const apiRoutes = [
+  ['/api/health', 'src/app/api/health/route.ts'],
+  ['/api/modelops', 'src/app/api/modelops/route.ts'],
+  ['/api/modelops/[id]', 'src/app/api/modelops/[id]/route.ts'],
+  ['/api/modelops/[id]/export', 'src/app/api/modelops/[id]/export/route.ts'],
+  ['/api/modelops/[id]/history', 'src/app/api/modelops/[id]/history/route.ts'],
+  ['/api/modelops/[id]/review', 'src/app/api/modelops/[id]/review/route.ts'],
+  ['/api/modelops/compare', 'src/app/api/modelops/compare/route.ts'],
+  ['/api/organization/active', 'src/app/api/organization/active/route.ts'],
+  ['/api/organization/governance', 'src/app/api/organization/governance/route.ts'],
+  ['/api/organization/onboarding', 'src/app/api/organization/onboarding/route.ts'],
+] as const;
+
+const unsupportedProductClaims = [
+  'ISO/IEC 42001 Ready',
+  'Zero PII Retention',
+  'NIST AI RMF 1.0 Aligned',
+  'EU AI Act Article 13 Compliant',
+] as const;
+
+async function sourceFiles(directory: string): Promise<string[]> {
+  const entries = await readdir(directory);
+  const nested = await Promise.all(entries.map(async (entry) => {
+    const absolute = path.join(directory, entry);
+    return (await stat(absolute)).isDirectory() ? sourceFiles(absolute) : [absolute];
+  }));
+  return nested.flat().filter((file) => /\.(?:ts|tsx)$/.test(file));
+}
+
+describe('project baseline boundaries', () => {
+  it('records the compatibility page and API inventory', () => {
+    for (const [, file] of [...pageRoutes, ...apiRoutes]) {
+      expect(() => readFileSync(path.join(root, file), 'utf8'), file).not.toThrow();
+    }
+  });
+
+  it('keeps unsupported certification and zero-retention claims out of user-facing source', async () => {
+    const files = await sourceFiles(path.join(root, 'src', 'components'));
+    const userFacingSource = files.map((file) => readFileSync(file, 'utf8')).join('\n');
+
+    for (const claim of unsupportedProductClaims) {
+      expect(userFacingSource, claim).not.toContain(claim);
+    }
+  });
+
+  it('prevents client modules from importing the privileged Supabase admin client', async () => {
+    const files = await sourceFiles(path.join(root, 'src'));
+    const violations = files.flatMap((file) => {
+      const source = readFileSync(file, 'utf8');
+      const isClientModule = /^\s*['\"]use client['\"];?/m.test(source);
+      const importsAdminClient = /from\s+['\"](?:@\/lib\/supabase\/admin|[^'\"]*\/supabase\/admin)['\"]/.test(source);
+      return isClientModule && importsAdminClient ? [path.relative(root, file)] : [];
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps every archetype free of fabricated model facts and evidence', () => {
+    for (const template of MODEL_TEMPLATES) {
+      expect(template.data, template.id).toEqual({
+        model_name: '',
+        version: '',
+        dataset: '',
+        intended_use: '',
+        metrics: {},
+        limitations: [],
+        risks: [],
+        tests: [],
+        reproducibility: '',
+      });
+    }
+  });
+});

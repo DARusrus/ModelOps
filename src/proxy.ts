@@ -58,11 +58,12 @@ export async function proxy(request: NextRequest) {
       global: { fetch: createTimeoutFetch(env.DATABASE_REQUEST_TIMEOUT_MS) },
       cookies: {
         getAll: () => request.cookies.getAll(),
-        setAll: (items) => {
+        setAll: (items, headers) => {
           items.forEach(({ name, value }) => request.cookies.set(name, value));
           requestHeaders.set('cookie', request.cookies.toString());
           response = createResponse();
           items.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          Object.entries(headers).forEach(([name, value]) => response.headers.set(name, value));
         },
       },
     });

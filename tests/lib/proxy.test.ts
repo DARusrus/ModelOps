@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const authMocks = vi.hoisted(() => ({ getClaims: vi.fn(), cookieOptions: undefined as undefined | { setAll: (items: Array<{ name: string; value: string; options: Record<string, unknown> }>) => void } }));
+const authMocks = vi.hoisted(() => ({ getClaims: vi.fn(), cookieOptions: undefined as undefined | { setAll: (items: Array<{ name: string; value: string; options: Record<string, unknown> }>, headers: Record<string, string>) => void } }));
 vi.mock('@supabase/ssr', () => ({
   createServerClient: vi.fn((_url, _key, options) => {
     authMocks.cookieOptions = options.cookies;
@@ -65,7 +65,10 @@ describe('CSP proxy', () => {
 
   it('forwards refreshed auth cookies to the application and browser response', async () => {
     authMocks.getClaims.mockImplementationOnce(async () => {
-      authMocks.cookieOptions?.setAll([{ name: 'sb-session', value: 'refreshed', options: { httpOnly: true, path: '/' } }]);
+      authMocks.cookieOptions?.setAll(
+        [{ name: 'sb-session', value: 'refreshed', options: { httpOnly: true, path: '/' } }],
+        { 'Cache-Control': 'private, no-store', Pragma: 'no-cache' },
+      );
       return { data: { claims: { sub: 'user-1' } }, error: null };
     });
 
@@ -74,5 +77,7 @@ describe('CSP proxy', () => {
     expect(response.cookies.get('sb-session')?.value).toBe('refreshed');
     expect(response.headers.get('X-Request-Id')).toMatch(/^[0-9a-f-]{36}$/);
     expect(response.headers.get('Content-Security-Policy')).toContain("default-src 'self'");
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.headers.get('Pragma')).toBe('no-cache');
   });
 });

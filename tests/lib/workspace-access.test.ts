@@ -4,6 +4,8 @@ import { workspaceAccessRedirect } from '../../src/lib/auth/workspace-access';
 describe('workspace access redirects', () => {
   it('sends unauthenticated visitors to sign in', () => {
     expect(workspaceAccessRedirect(new Error('UNAUTHENTICATED'))).toBe('/login');
+    expect(workspaceAccessRedirect(new Error('UNAUTHENTICATED'), '/evaluations/card-1')).toBe('/login?next=%2Fevaluations%2Fcard-1');
+    expect(workspaceAccessRedirect(new Error('UNAUTHENTICATED'), 'https://attacker.test')).toBe('/login');
   });
 
   it('requires organization selection without an active valid membership', () => {
