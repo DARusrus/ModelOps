@@ -17,6 +17,16 @@ describe('GET /auth/callback', () => {
     const response = await GET(new NextRequest('https://modelops.example.test/auth/callback?code=valid-code'));
     expect(mocks.exchange).toHaveBeenCalledWith('valid-code');
     expect(response.headers.get('location')).toBe('https://modelops.example.test/modelops');
+    expect(response.headers.get('cache-control')).toContain('no-store');
+  });
+
+  it('allows only approved continuation routes and marks a recovery session', async () => {
+    const response = await GET(new NextRequest('https://modelops.example.test/auth/callback?code=recovery-code&next=/reset-password'));
+    expect(response.headers.get('location')).toBe('https://modelops.example.test/reset-password');
+    expect(response.headers.get('set-cookie')).toContain('modelops-password-recovery=1');
+
+    const rejected = await GET(new NextRequest('https://modelops.example.test/auth/callback?code=valid-code&next=https://attacker.test'));
+    expect(rejected.headers.get('location')).toBe('https://modelops.example.test/modelops');
   });
 
   it('returns to sign-in without exposing provider details when exchange fails', async () => {

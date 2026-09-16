@@ -2,6 +2,7 @@ import 'server-only';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { canPerform, type Role } from '@/lib/auth/permissions';
 import { cookies } from 'next/headers';
+import { ACTIVE_ORGANIZATION_COOKIE } from '@/lib/auth/active-organization';
 export type { Role } from '@/lib/auth/permissions';
 
 export async function requireActor(organizationId: string, permission: string) {
@@ -18,7 +19,7 @@ export async function requireDefaultActor(permission: string) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('UNAUTHENTICATED');
-  const activeOrganizationId = (await cookies()).get('modelops-active-organization')?.value;
+  const activeOrganizationId = (await cookies()).get(ACTIVE_ORGANIZATION_COOKIE)?.value;
   if (activeOrganizationId) {
     const { data: membership } = await supabase.from('memberships').select('organization_id, role').eq('organization_id', activeOrganizationId).eq('user_id', user.id).maybeSingle();
     const role = membership?.role as Role | undefined;

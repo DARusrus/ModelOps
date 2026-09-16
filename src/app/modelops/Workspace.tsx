@@ -12,7 +12,7 @@ import LandingFeatures from '@/components/modelops/LandingFeatures';
 import LoadingState from '@/components/common/LoadingState';
 import ErrorState from '@/components/common/ErrorState';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
-import { ModelTemplate } from '@/components/modelops/TemplateSelector';
+import { ModelTemplate } from '@/components/modelops/model-templates';
 import { ResultViewSkeleton } from '@/components/modelops/Skeletons';
 import { ArrowLeft, RotateCcw, LayoutGrid, RefreshCw, SearchX } from 'lucide-react';
 import { ApiClientError, requestJson } from '@/lib/client/api';

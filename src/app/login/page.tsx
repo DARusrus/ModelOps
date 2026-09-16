@@ -1,22 +1,29 @@
-'use client';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@supabase/ssr';
-import { createTimeoutFetch } from '@/lib/network/timeout';
-export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState(''); const [password, setPassword] = useState(''); const [message, setMessage] = useState(''); const [submitting, setSubmitting] = useState(false);
-  async function submit(event: React.FormEvent) {
-    event.preventDefault(); setSubmitting(true); setMessage('');
-    try {
-      const client = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, { global: { fetch: createTimeoutFetch(15_000) } });
-      const { error } = await client.auth.signInWithPassword({ email, password });
-      if (error) return setMessage('Sign-in failed. Check your email and password, then try again.');
-      router.replace('/modelops');
-      router.refresh();
-    } catch {
-      setMessage('Sign-in is temporarily unavailable. Please try again.');
-    } finally { setSubmitting(false); }
-  }
-  return <main className="min-h-screen grid place-items-center p-6"><form onSubmit={submit} className="w-full max-w-sm space-y-4 border p-6 rounded"><h1 className="text-xl font-bold">ModelOps sign in</h1><div><label htmlFor="email" className="mb-1 block text-sm font-medium">Email</label><input id="email" required type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="w-full border p-2"/></div><div><label htmlFor="password" className="mb-1 block text-sm font-medium">Password</label><input id="password" required type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className="w-full border p-2"/></div><button disabled={submitting} className="w-full bg-emerald-700 text-white p-2 rounded disabled:opacity-60">{submitting ? 'Signing in…' : 'Sign in'}</button>{message && <p role="alert">{message}</p>}</form></main>;
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import AuthFrame from '@/components/auth/AuthFrame';
+import { safeAuthContinuation } from '@/lib/auth/continuation';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
+import LoginForm from './LoginForm';
+
+const callbackMessages: Record<string, string> = {
+  missing_callback_code: 'The sign-in link is incomplete. Request a new link and try again.',
+  session_exchange_failed: 'The sign-in link is invalid or expired. Request a new link and try again.',
+  password_updated: 'Your password was updated. Sign in with the new password.',
+};
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; error?: string; status?: string }> }) {
+  const params = await searchParams;
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) redirect(safeAuthContinuation(params.next));
+
+  const message = callbackMessages[params.error ?? params.status ?? ''];
+  const nextPath = safeAuthContinuation(params.next);
+  const signupHref = nextPath === '/modelops' ? '/signup' : `/signup?next=${encodeURIComponent(nextPath)}`;
+
+  return (
+    <AuthFrame title="Sign in" description="Access your organization’s governed model evaluations." footer={<p>New to ModelOps? <Link href={signupHref} className="font-semibold text-emerald-800 underline-offset-4 hover:underline">Create an account</Link></p>}>
+      <LoginForm nextPath={nextPath} initialMessage={message} />
+    </AuthFrame>
+  );
 }

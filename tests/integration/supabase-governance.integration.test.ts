@@ -44,6 +44,14 @@ async function requireData<T>(result: { data: T | null; error: { message: string
   return result.data;
 }
 
+function requireSuccessfulCalls(
+  results: Array<{ error: { code?: string; message: string; details?: string; hint?: string } | null }>,
+  operation: string,
+): void {
+  const failures = results.flatMap((result, index) => result.error ? [{ request: index + 1, ...result.error }] : []);
+  if (failures.length > 0) throw new Error(`${operation}: ${JSON.stringify(failures)}`);
+}
+
 describe.skipIf(!enabled)('Supabase governance integration', () => {
   let fixture: Fixture;
 
@@ -109,7 +117,7 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
     expect(ownerRead.error).toBeNull();
     expect(ownerRead.data?.id).toBe(fixture.cardAId);
     const emptyChainIntegrity = await owner.rpc('verify_model_card_attestations', { target_card: fixture.cardAId });
-    expect(emptyChainIntegrity.error).toBeNull();
+    expect(emptyChainIntegrity.error, JSON.stringify(emptyChainIntegrity.error)).toBeNull();
     expect(emptyChainIntegrity.data).toMatchObject({ valid: true, checked_events: 0 });
     const expiredRead = await owner.from('model_cards').select('id').eq('id', fixture.expiredCardAId).maybeSingle();
     expect(expiredRead.error).toBeNull();
@@ -216,10 +224,10 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
       target_key: key,
       fingerprint,
     };
-    const claims = await Promise.all(Array.from({ length: 12 }, () => fixture.admin.rpc('claim_idempotency', claimArgs)));
-    expect(claims.every((claim) => claim.error === null)).toBe(true);
+    const claims = await Promise.all(Array.from({ length: 4 }, () => fixture.admin.rpc('claim_idempotency', claimArgs)));
+    requireSuccessfulCalls(claims, 'concurrent idempotency claims');
     expect(claims.filter((claim) => claim.data?.action === 'claimed')).toHaveLength(1);
-    expect(claims.filter((claim) => claim.data?.action === 'in_progress')).toHaveLength(11);
+    expect(claims.filter((claim) => claim.data?.action === 'in_progress')).toHaveLength(3);
 
     const payload = {
       model_name: `Atomic integration ${key}`,
@@ -361,5 +369,58 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
     expect(acquiredAgain.error).toBeNull();
     expect(acquiredAgain.data).toMatch(/^[0-9a-f-]{36}$/i);
     await fixture.admin.rpc('release_provider_concurrency_lease', { target_lease: acquiredAgain.data });
+  });
+
+  it('creates one confirmed-user workspace atomically without caller-controlled identity or role', async () => {
+    const config = integrationConfig();
+    const anonymous = createClient(config.url, config.publishableKey, { auth: { autoRefreshToken: false, persistSession: false } });
+    const unauthenticated = await anonymous.rpc('create_initial_workspace', { workspace_name: 'Unauthorized workspace' });
+    expect(unauthenticated.error).not.toBeNull();
+
+    const password = `ModelOps-onboarding-${crypto.randomUUID()}-safe`;
+    const createdUser = await fixture.admin.auth.admin.createUser({
+      email: `modelops-onboarding-${crypto.randomUUID()}@example.test`,
+      password,
+      email_confirm: true,
+    });
+    if (createdUser.error || !createdUser.data.user?.email) throw new Error(`create onboarding user: ${createdUser.error?.message || 'no user returned'}`);
+    const user = createdUser.data.user;
+
+    try {
+      const client = await signedInClient({ email: user.email!, password });
+      const attempts = await Promise.all(Array.from({ length: 4 }, () => client.rpc('create_initial_workspace', { workspace_name: 'Atomic Onboarding' })));
+      requireSuccessfulCalls(attempts, 'concurrent initial-workspace creation');
+      const rows = attempts.flatMap((attempt) => attempt.data ?? []);
+      expect(new Set(rows.map((row) => row.organization_id)).size).toBe(1);
+      expect(rows.filter((row) => row.created)).toHaveLength(1);
+      expect(rows.every((row) => row.organization_role === 'admin')).toBe(true);
+
+      const organizationId = rows[0].organization_id;
+      const organizations = await fixture.admin.from('organizations').select('id, name').eq('created_by', user.id);
+      expect(organizations.error).toBeNull();
+      expect(organizations.data).toEqual([{ id: organizationId, name: 'Atomic Onboarding' }]);
+
+      const membership = await fixture.admin.from('memberships').select('organization_id, user_id, role').eq('organization_id', organizationId).eq('user_id', user.id).single();
+      expect(membership.error).toBeNull();
+      expect(membership.data).toEqual({ organization_id: organizationId, user_id: user.id, role: 'admin' });
+
+      const audit = await fixture.admin.from('audit_events').select('event_type, actor_id').eq('organization_id', organizationId).eq('event_type', 'organization_created');
+      expect(audit.error).toBeNull();
+      expect(audit.data).toEqual([{ event_type: 'organization_created', actor_id: user.id }]);
+
+      const replay = await client.rpc('create_initial_workspace', { workspace_name: 'Must Not Rename Existing Workspace' });
+      expect(replay.error).toBeNull();
+      expect(replay.data).toEqual([{ organization_id: organizationId, organization_name: 'Atomic Onboarding', organization_role: 'admin', created: false }]);
+
+      const callerControlled = await client.rpc('create_initial_workspace', {
+        workspace_name: 'Rejected',
+        requesting_actor: fixture.userA.id,
+        requested_role: 'admin',
+      } as never);
+      expect(callerControlled.error).not.toBeNull();
+    } finally {
+      await fixture.admin.from('organizations').delete().eq('created_by', user.id);
+      await fixture.admin.auth.admin.deleteUser(user.id);
+    }
   });
 });

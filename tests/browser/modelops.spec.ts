@@ -33,9 +33,9 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     // review transitions, and comparison), so allow normal remote CI variance.
     test.slow();
     await page.goto('/modelops');
-    await expect(page).toHaveURL(/\/login$/);
+    await expect(page).toHaveURL(/\/login(?:\?|$)/);
     await page.getByLabel('Email').fill(fixture!.user.email);
-    await page.getByLabel('Password').fill(fixture!.user.password);
+    await page.getByLabel('Password', { exact: true }).fill(fixture!.user.password);
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page).toHaveURL(/\/modelops$/);
     await page.getByRole('button', { name: 'Blank template' }).click();
@@ -47,6 +47,10 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     await page.getByLabel('Evaluation benchmark dataset').fill('browser-e2e-benchmark');
     await page.getByRole('button', { name: 'Generate Model Card' }).click();
     await expect(page.getByRole('heading', { level: 2, name: /^Browser validated model v1\.0\.0$/ })).toBeVisible();
+    await page.getByRole('button', { name: /What-If/ }).click();
+    await expect(page.getByRole('heading', { name: /What Would It Take/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Simulate All Fixes' }).click();
+    await expect(page.getByText('Re-evaluate after evidence is supplied')).toBeVisible();
     await page.getByRole('button', { name: 'Policy & Audit Trail' }).click();
     await expect(page.getByRole('region', { name: 'Review attestation' })).toBeVisible();
     await page.getByLabel('Reason for this workflow action').fill('Browser workflow validation submission.');
@@ -124,11 +128,27 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
 
   test('has no serious or critical automated accessibility violations on sign-in and the protected landing page', async ({ page }) => {
     await page.goto('/login');
+    await expect(page.getByRole('link', { name: 'Create an account' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Forgot password?' })).toBeVisible();
     expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
     await page.getByLabel('Email').fill(fixture!.user.email);
-    await page.getByLabel('Password').fill(fixture!.user.password);
+    await page.getByLabel('Password', { exact: true }).fill(fixture!.user.password);
     await page.getByRole('button', { name: 'Sign in' }).click();
     await expect(page).toHaveURL(/\/modelops$/);
     expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
+  });
+
+  test('onboards a confirmed user into one initial organization', async ({ page }) => {
+    await page.goto('/login?next=%2Fonboarding');
+    await page.getByLabel('Email').fill(fixture!.onboardingUser.email);
+    await page.getByLabel('Password', { exact: true }).fill(fixture!.onboardingUser.password);
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page).toHaveURL(/\/onboarding$/);
+    await page.getByLabel('Workspace name').fill('Browser onboarding workspace');
+    await page.getByRole('button', { name: 'Create workspace' }).click();
+    await expect(page).toHaveURL(/\/modelops$/);
+    await expect(page.getByRole('heading', { name: 'Model card generator' })).toBeVisible();
+    await page.reload();
+    await expect(page).toHaveURL(/\/modelops$/);
   });
 });

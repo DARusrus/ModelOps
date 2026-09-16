@@ -2,31 +2,31 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ShieldCheck, ExternalLink, Award, CheckCircle2, Lock } from 'lucide-react';
+import { ShieldCheck, ExternalLink, CheckCircle2, Lock, Users } from 'lucide-react';
 
 export default function Footer() {
   return (
     <footer className="bg-[#FAFAFA] border-t border-gray-200 mt-20 text-gray-600 text-sm">
-      {/* Top Certifications / Badges Bar */}
+      {/* Implemented capability summary. These are not certification badges. */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-10 pb-6 border-b border-gray-200">
         <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-gray-500">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span className="font-semibold text-gray-800">ModelOps Governance Engine:</span>
-            <span>Production v1.0.0 (Deterministic Scoring + AI Failover Gateway)</span>
+            <span>Deterministic scoring with controlled, optional AI suggestions</span>
           </div>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-1.5 text-gray-700 font-medium">
               <CheckCircle2 className="w-4 h-4 text-[#13715B]" />
-              ISO/IEC 42001 Ready
+              Evidence-based scoring
             </div>
             <div className="flex items-center gap-1.5 text-gray-700 font-medium">
               <Lock className="w-4 h-4 text-[#13715B]" />
-              Zero PII Retention
+              Organization-scoped records
             </div>
             <div className="flex items-center gap-1.5 text-gray-700 font-medium">
-              <Award className="w-4 h-4 text-[#13715B]" />
-              NIST AI RMF 1.0 Aligned
+              <Users className="w-4 h-4 text-[#13715B]" />
+              Human review workflow
             </div>
           </div>
         </div>
@@ -45,11 +45,11 @@ export default function Footer() {
               <span className="font-bold text-gray-900 text-base">ModelOps</span>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed">
-              Open-source ML governance, automated model card synthesis, and deterministic readiness evaluations for enterprise AI systems.
+              ML governance workflows, structured model cards, and deterministic readiness evaluations for AI systems.
             </p>
             <div className="flex items-center gap-3 pt-2">
               <a
-                href="https://github.com"
+                href="https://github.com/DARusrus/ModelOps"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-1.5 rounded border border-gray-200 bg-white text-gray-500 hover:text-gray-900 hover:border-gray-300 transition-colors"
@@ -85,7 +85,7 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <span className="text-gray-600">Model Inventory (Enterprise)</span>
+                <span className="text-gray-600">Saved evaluation inventory</span>
               </li>
             </ul>
           </div>
@@ -119,7 +119,7 @@ export default function Footer() {
                 </a>
               </li>
               <li>
-                <span className="text-gray-600">EU AI Act Statutory Rules</span>
+                <span className="text-gray-600">Internal governance review profiles</span>
               </li>
             </ul>
           </div>
@@ -131,10 +131,10 @@ export default function Footer() {
             </h4>
             <ul className="space-y-2 text-xs">
               <li>
-                <span className="text-gray-600">Groq LLaMA-3.3-70B Primary</span>
+                <span className="text-gray-600">Configured Groq provider</span>
               </li>
               <li>
-                <span className="text-gray-600">Google Gemini 1.5 Fallback</span>
+                <span className="text-gray-600">Configured Gemini fallback</span>
               </li>
               <li>
                 <span className="text-gray-600">Offline Metadata Synthesis</span>

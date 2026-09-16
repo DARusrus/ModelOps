@@ -70,7 +70,7 @@ async function expectSuccessful(response: APIResponse) {
 async function authenticate(page: Page, fixture: BrowserFixture) {
   await page.goto('/login');
   await page.getByLabel('Email').fill(fixture.user.email);
-  await page.getByLabel('Password').fill(fixture.user.password);
+  await page.getByLabel('Password', { exact: true }).fill(fixture.user.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/modelops$/);
 }

@@ -7,7 +7,7 @@ export default async function ModelOpsWorkspacePage() {
   try {
     await requireDefaultActor('read');
   } catch (error) {
-    redirect(workspaceAccessRedirect(error));
+    redirect(workspaceAccessRedirect(error, '/modelops'));
   }
   return <ModelOpsWorkspace />;
 }
