@@ -7,6 +7,7 @@ export type BrowserFixture = {
   organizationId: string;
   user: { id: string; email: string; password: string };
   onboardingUser: { id: string; email: string; password: string };
+  invitedUser: { id: string; email: string; password: string };
 };
 
 function config() {
@@ -41,9 +42,16 @@ export async function createBrowserFixture(): Promise<BrowserFixture> {
     await admin.auth.admin.deleteUser(created.data.user.id);
     throw new Error(`Create onboarding browser test user failed: ${onboardingCreated.error?.message || 'no user returned'}`);
   }
+  const invitedCreated = await admin.auth.admin.createUser({ email: `modelops-invited-${runId}@example.test`, password, email_confirm: true });
+  if (invitedCreated.error || !invitedCreated.data.user) {
+    await admin.auth.admin.deleteUser(onboardingCreated.data.user.id);
+    await admin.auth.admin.deleteUser(created.data.user.id);
+    throw new Error(`Create invited browser test user failed: ${invitedCreated.error?.message || 'no user returned'}`);
+  }
   const organization = await admin.from('organizations').insert({ name: `ModelOps browser E2E ${runId}` }).select('id').single();
   if (organization.error || !organization.data) {
     await admin.auth.admin.deleteUser(onboardingCreated.data.user.id);
+    await admin.auth.admin.deleteUser(invitedCreated.data.user.id);
     await admin.auth.admin.deleteUser(created.data.user.id);
     throw new Error(`Create browser test organization failed: ${organization.error?.message || 'no organization returned'}`);
   }
@@ -51,6 +59,7 @@ export async function createBrowserFixture(): Promise<BrowserFixture> {
   if (membership.error) {
     await admin.from('organizations').delete().eq('id', organization.data.id);
     await admin.auth.admin.deleteUser(onboardingCreated.data.user.id);
+    await admin.auth.admin.deleteUser(invitedCreated.data.user.id);
     await admin.auth.admin.deleteUser(created.data.user.id);
     throw new Error(`Create browser test membership failed: ${membership.error.message}`);
   }
@@ -59,6 +68,7 @@ export async function createBrowserFixture(): Promise<BrowserFixture> {
     organizationId: organization.data.id,
     user: { id: created.data.user.id, email: created.data.user.email!, password },
     onboardingUser: { id: onboardingCreated.data.user.id, email: onboardingCreated.data.user.email!, password },
+    invitedUser: { id: invitedCreated.data.user.id, email: invitedCreated.data.user.email!, password },
   };
 }
 
@@ -67,8 +77,9 @@ export async function removeBrowserFixture(fixture: BrowserFixture | undefined) 
   const onboardingOrganization = await fixture.admin.from('organizations').delete().eq('created_by', fixture.onboardingUser.id);
   const organization = await fixture.admin.from('organizations').delete().eq('id', fixture.organizationId);
   const onboardingUser = await fixture.admin.auth.admin.deleteUser(fixture.onboardingUser.id);
+  const invitedUser = await fixture.admin.auth.admin.deleteUser(fixture.invitedUser.id);
   const user = await fixture.admin.auth.admin.deleteUser(fixture.user.id);
-  if (onboardingOrganization.error || organization.error || onboardingUser.error || user.error) {
-    throw new Error(`Browser fixture cleanup failed: ${onboardingOrganization.error?.message || organization.error?.message || onboardingUser.error?.message || user.error?.message}`);
+  if (onboardingOrganization.error || organization.error || onboardingUser.error || invitedUser.error || user.error) {
+    throw new Error(`Browser fixture cleanup failed: ${onboardingOrganization.error?.message || organization.error?.message || onboardingUser.error?.message || invitedUser.error?.message || user.error?.message}`);
   }
 }

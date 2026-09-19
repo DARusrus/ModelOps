@@ -13,10 +13,12 @@ const pageRoutes = [
   ['/signup/check-email', 'src/app/signup/check-email/page.tsx'],
   ['/forgot-password', 'src/app/forgot-password/page.tsx'],
   ['/reset-password', 'src/app/reset-password/page.tsx'],
+  ['/invite/accept', 'src/app/invite/accept/page.tsx'],
   ['/modelops', 'src/app/modelops/page.tsx'],
   ['/onboarding', 'src/app/onboarding/page.tsx'],
   ['/select-organization', 'src/app/select-organization/page.tsx'],
   ['/forbidden', 'src/app/forbidden/page.tsx'],
+  ['/settings/members', 'src/app/settings/members/page.tsx'],
 ] as const;
 
 const apiRoutes = [
@@ -30,6 +32,11 @@ const apiRoutes = [
   ['/api/organization/active', 'src/app/api/organization/active/route.ts'],
   ['/api/organization/governance', 'src/app/api/organization/governance/route.ts'],
   ['/api/organization/onboarding', 'src/app/api/organization/onboarding/route.ts'],
+  ['/api/organization/invitations', 'src/app/api/organization/invitations/route.ts'],
+  ['/api/organization/invitations/[id]', 'src/app/api/organization/invitations/[id]/route.ts'],
+  ['/api/organization/invitations/[id]/accept', 'src/app/api/organization/invitations/[id]/accept/route.ts'],
+  ['/api/organization/members', 'src/app/api/organization/members/route.ts'],
+  ['/api/organization/members/[userId]', 'src/app/api/organization/members/[userId]/route.ts'],
 ] as const;
 
 const unsupportedProductClaims = [
@@ -90,5 +97,53 @@ describe('project baseline boundaries', () => {
         reproducibility: '',
       });
     }
+  });
+
+  it('uses opt-in execution for public functions and explicitly seals server-only RPCs', () => {
+    const migration = readFileSync(
+      path.join(root, 'supabase/migrations/202609160002_restrict_privileged_rpc_execution.sql'),
+      'utf8',
+    );
+    expect(migration).toContain('alter default privileges for role postgres in schema public');
+    expect(migration).toContain('revoke execute on functions from public, anon, authenticated');
+
+    const serverOnlyFunctions = [
+      'create_organization_invitation_as',
+      'list_organization_members_as',
+      'change_organization_member_role_as',
+      'remove_organization_member_as',
+      'claim_idempotency',
+      'persist_model_card_idempotently',
+      'attest_model_card_idempotently',
+      'purge_expired_governance_records',
+    ];
+    for (const functionName of serverOnlyFunctions) {
+      expect(migration).toMatch(
+        new RegExp(`revoke execute on function public\\.${functionName}\\([^;]+ from anon, authenticated;`),
+      );
+    }
+  });
+
+  it('keeps invitation actor retention consistent with terminal-state constraints', () => {
+    const migration = readFileSync(
+      path.join(root, 'supabase/migrations/202609170002_preserve_invitation_actor_references.sql'),
+      'utf8',
+    );
+    expect(migration).toContain('drop constraint organization_invitations_accepted_by_fkey');
+    expect(migration).toMatch(/foreign key \(accepted_by\) references auth\.users\(id\) on delete restrict;/);
+    expect(migration).not.toContain('on delete set null');
+  });
+
+  it('keeps member listing columns qualified and service-role only', () => {
+    const migration = readFileSync(
+      path.join(root, 'supabase/migrations/202609190001_fix_member_listing.sql'),
+      'utf8',
+    );
+    expect(migration).toContain('requester_membership.organization_id = target_organization');
+    expect(migration).toContain('requester_membership.user_id = requesting_actor');
+    expect(migration).toContain('requester_membership.role = \'admin\'');
+    expect(migration).toContain('member_membership.user_id');
+    expect(migration).toMatch(/from public, anon, authenticated;/);
+    expect(migration).toMatch(/to service_role;/);
   });
 });

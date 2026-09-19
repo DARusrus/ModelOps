@@ -22,8 +22,43 @@ async function scanSeriousAndCriticalViolations(page: import('@playwright/test')
   });
 }
 
+async function signIn(
+  page: import('@playwright/test').Page,
+  user: BrowserFixture['user'],
+  expectedPath: RegExp,
+) {
+  await page.getByLabel('Email').fill(user.email);
+  await page.getByLabel('Password', { exact: true }).fill(user.password);
+  const tokenResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST'
+      && url.pathname === '/auth/v1/token'
+      && url.searchParams.get('grant_type') === 'password';
+  });
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  expect((await tokenResponse).status(), 'Supabase password authentication must succeed').toBe(200);
+  await expect(page).toHaveURL(expectedPath, { timeout: 30_000 });
+}
+
+async function signOut(page: import('@playwright/test').Page) {
+  const logoutResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST' && url.pathname === '/auth/v1/logout';
+  });
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  const response = await logoutResponse;
+  expect(response.ok(), `Supabase sign-out must succeed (HTTP ${response.status()})`).toBe(true);
+  await expect(page).toHaveURL(/\/login$/, { timeout: 30_000 });
+
+  const authCookies = (await page.context().cookies())
+    .filter((cookie) => cookie.name.includes('-auth-token'));
+  expect(authCookies, 'Supabase authentication cookies must be cleared after sign-out').toEqual([]);
+}
+
 browserDescribe('ModelOps browser workflow (requires the disposable Supabase runner)', () => {
   let fixture: BrowserFixture | undefined;
+
+  test.describe.configure({ timeout: 90_000 });
 
   test.beforeAll(async () => { fixture = await createBrowserFixture(); });
   test.afterAll(async () => { await removeBrowserFixture(fixture); });
@@ -34,10 +69,7 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     test.slow();
     await page.goto('/modelops');
     await expect(page).toHaveURL(/\/login(?:\?|$)/);
-    await page.getByLabel('Email').fill(fixture!.user.email);
-    await page.getByLabel('Password', { exact: true }).fill(fixture!.user.password);
-    await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page).toHaveURL(/\/modelops$/);
+    await signIn(page, fixture!.user, /\/modelops$/);
     await page.getByRole('button', { name: 'Blank template' }).click();
     await page.getByLabel('Model name').fill('Browser validated model');
     await page.getByLabel('Version').fill('1.0.0');
@@ -131,24 +163,88 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     await expect(page.getByRole('link', { name: 'Create an account' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Forgot password?' })).toBeVisible();
     expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
-    await page.getByLabel('Email').fill(fixture!.user.email);
-    await page.getByLabel('Password', { exact: true }).fill(fixture!.user.password);
-    await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page).toHaveURL(/\/modelops$/);
+    await signIn(page, fixture!.user, /\/modelops$/);
     expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
   });
 
   test('onboards a confirmed user into one initial organization', async ({ page }) => {
     await page.goto('/login?next=%2Fonboarding');
-    await page.getByLabel('Email').fill(fixture!.onboardingUser.email);
-    await page.getByLabel('Password', { exact: true }).fill(fixture!.onboardingUser.password);
-    await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page).toHaveURL(/\/onboarding$/);
+    await signIn(page, fixture!.onboardingUser, /\/onboarding$/);
     await page.getByLabel('Workspace name').fill('Browser onboarding workspace');
     await page.getByRole('button', { name: 'Create workspace' }).click();
     await expect(page).toHaveURL(/\/modelops$/);
     await expect(page.getByRole('heading', { name: 'Model card generator' })).toBeVisible();
     await page.reload();
     await expect(page).toHaveURL(/\/modelops$/);
+  });
+
+  test('accepts an invitation and lets an administrator change and remove the member', async ({ page }) => {
+    test.slow();
+    await page.goto('/login');
+    await signIn(page, fixture!.user, /\/modelops$/);
+    await page.goto('/settings/members');
+    await expect(page.getByRole('heading', { name: 'Members and invitations' })).toBeVisible();
+    expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
+    await page.getByLabel('Email address').fill(fixture!.invitedUser.email);
+    await page.getByLabel('Initial role').selectOption('reviewer');
+    await page.getByRole('button', { name: 'Create invitation' }).click();
+    await expect(page.locator('article').filter({ hasText: fixture!.invitedUser.email })).toBeVisible();
+
+    const invitation = await fixture!.admin
+      .from('organization_invitations')
+      .select('id')
+      .eq('organization_id', fixture!.organizationId)
+      .eq('email', fixture!.invitedUser.email)
+      .eq('status', 'pending')
+      .single();
+    expect(invitation.error, JSON.stringify(invitation.error)).toBeNull();
+    const invitationId = invitation.data!.id;
+
+    await signOut(page);
+    await page.goto(`/invite/accept?invitation=${invitationId}`);
+    await expect(page).toHaveURL(/\/login\?next=/, { timeout: 30_000 });
+    await signIn(page, fixture!.invitedUser, new RegExp(`/invite/accept\\?invitation=${invitationId}`));
+    const acceptanceResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return response.request().method() === 'POST'
+        && url.pathname === `/api/organization/invitations/${invitationId}/accept`;
+    });
+    await page.getByRole('button', { name: 'Accept organization invitation' }).click();
+    expect((await acceptanceResponse).status(), 'Invitation acceptance must succeed').toBe(200);
+    await expect(page).toHaveURL(/\/modelops$/, { timeout: 30_000 });
+
+    await page.goto('/settings/members');
+    await expect(page).toHaveURL(/\/forbidden$/);
+    const forbiddenApiStatus = await page.evaluate(async () => (await fetch('/api/organization/members')).status);
+    expect(forbiddenApiStatus).toBe(403);
+
+    await page.goto('/modelops');
+    await signOut(page);
+    await signIn(page, fixture!.user, /\/modelops$/);
+    await page.goto('/settings/members');
+    const memberRow = page.getByRole('row').filter({ hasText: fixture!.invitedUser.email });
+    await expect(memberRow).toBeVisible();
+    await memberRow.getByLabel(`Role for ${fixture!.invitedUser.email}`).selectOption('editor');
+    await expect(page.getByText(`Role updated for ${fixture!.invitedUser.email}.`)).toBeVisible();
+    page.once('dialog', (dialog) => dialog.accept());
+    await memberRow.getByRole('button', { name: 'Remove' }).click();
+    await expect(page.getByText(`${fixture!.invitedUser.email} was removed.`)).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: fixture!.invitedUser.email })).toHaveCount(0);
+
+    await page.getByLabel('Email address').fill(fixture!.invitedUser.email);
+    await page.getByLabel('Initial role').selectOption('viewer');
+    await page.getByRole('button', { name: 'Create invitation' }).click();
+    const pendingInvitation = page.locator('article')
+      .filter({ hasText: fixture!.invitedUser.email })
+      .filter({ hasText: 'pending' });
+    await expect(pendingInvitation).toContainText('pending');
+    await pendingInvitation.getByRole('button', { name: 'Resend' }).click();
+    await expect(page.getByText(`Invitation renewed for ${fixture!.invitedUser.email}.`)).toBeVisible();
+    page.once('dialog', (dialog) => dialog.accept());
+    await pendingInvitation.getByRole('button', { name: 'Revoke' }).click();
+    await expect(page.getByText(`Invitation revoked for ${fixture!.invitedUser.email}.`)).toBeVisible();
+    await expect(page.locator('article')
+      .filter({ hasText: fixture!.invitedUser.email })
+      .filter({ hasText: 'revoked' })).toBeVisible();
   });
 });

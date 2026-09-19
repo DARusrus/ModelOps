@@ -3,17 +3,33 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { History, Shield, Sparkles, LogOut } from 'lucide-react';
+import { History, Shield, Sparkles, LogOut, Users } from 'lucide-react';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 interface NavbarProps {
   onScrollToForm?: () => void;
   onScrollToHistory?: () => void;
+  role?: 'viewer' | 'editor' | 'reviewer' | 'admin';
 }
+
+const teamLinkClass = [
+  'inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded border border-gray-300',
+  'px-2.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2',
+  'sm:min-h-10 sm:min-w-0 sm:px-3',
+].join(' ');
+
+const signOutButtonClass = [
+  'inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-1.5 rounded border border-gray-300',
+  'px-2.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2',
+  'sm:min-h-10 sm:min-w-0 sm:px-3 sm:py-1.5',
+].join(' ');
 
 export default function Navbar({
   onScrollToForm,
   onScrollToHistory,
+  role,
 }: NavbarProps) {
   const router = useRouter();
   const signOut = async () => {
@@ -73,8 +89,21 @@ export default function Navbar({
 
         {/* Right CTA & Settings Actions */}
         <div className="flex items-center gap-2.5">
+          {role === 'admin' && (
+            <Link
+              href="/settings/members"
+              className={teamLinkClass}
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span className="sr-only sm:not-sr-only">Team</span>
+            </Link>
+          )}
           {onScrollToHistory && (
-            <button type="button" onClick={onScrollToHistory} className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
+            <button
+              type="button"
+              onClick={onScrollToHistory}
+              className="hidden items-center gap-1.5 rounded border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50 sm:inline-flex"
+            >
               <History className="w-3.5 h-3.5" />
               <span>History</span>
             </button>
@@ -83,14 +112,15 @@ export default function Navbar({
             <button
               type="button"
               onClick={onScrollToForm}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded bg-[#13715B] hover:bg-[#0f5c49] text-white shadow-xs transition-colors cursor-pointer"
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded bg-[#13715B] px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-[#0f5c49]"
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>Generate Card</span>
             </button>
           )}
-          <button type="button" onClick={signOut} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors">
-            <LogOut className="w-3.5 h-3.5" /><span>Sign out</span>
+          <button type="button" onClick={signOut} className={signOutButtonClass}>
+            <LogOut className="h-3.5 w-3.5" />
+            <span className="sr-only sm:not-sr-only">Sign out</span>
           </button>
         </div>
       </div>

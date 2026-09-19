@@ -5,8 +5,10 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/integration/**/*.test.ts'],
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
+    // Reads use bounded retryable attempts; mutations have one longer bounded
+    // attempt. The suite budget covers sequential live calls without hangs.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
   resolve: {
     alias: {
