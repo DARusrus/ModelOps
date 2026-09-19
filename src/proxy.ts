@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { env } from '@/lib/env';
 import { createTimeoutFetch } from '@/lib/network/timeout';
+import { WORKSPACE_PATH_HEADER } from '@/lib/auth/workspace-path';
 
 function contentSecurityPolicy(nonce: string, isDevelopment: boolean) {
   const supabaseOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -43,6 +44,9 @@ export async function proxy(request: NextRequest) {
   // Do not trust a client-provided correlation ID. A new server-generated ID
   // makes the header safe to use as a log correlation key.
   requestHeaders.set('x-request-id', requestId);
+  // Protected layouts use this server-derived value to preserve safe deep
+  // links during authentication. Overwrite any client-provided header.
+  requestHeaders.set(WORKSPACE_PATH_HEADER, `${request.nextUrl.pathname}${request.nextUrl.search}`);
   if (!isApiRequest) {
     requestHeaders.set('x-nonce', nonce);
     requestHeaders.set('Content-Security-Policy', policy);

@@ -45,6 +45,7 @@ async function signOut(page: import('@playwright/test').Page) {
     const url = new URL(response.url());
     return response.request().method() === 'POST' && url.pathname === '/auth/v1/logout';
   });
+  await page.getByLabel('Open account menu').click();
   await page.getByRole('button', { name: 'Sign out' }).click();
   const response = await logoutResponse;
   expect(response.ok(), `Supabase sign-out must succeed (HTTP ${response.status()})`).toBe(true);
@@ -167,6 +168,57 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
   });
 
+  test('keeps protected navigation URL-based, refresh-safe, and role-aware', async ({ page }) => {
+    await page.goto('/login');
+    await signIn(page, fixture!.user, /\/modelops$/);
+
+    const workspaceNavigation = page.getByRole('navigation', { name: 'Workspace navigation' });
+    await expect(workspaceNavigation.getByRole('link', { name: /Model card studio/ })).toHaveAttribute('aria-current', 'page');
+    await workspaceNavigation.getByRole('link', { name: /^Team/ }).click();
+    await expect(page).toHaveURL(/\/settings\/members$/);
+    await expect(workspaceNavigation.getByRole('link', { name: /^Team/ })).toHaveAttribute('aria-current', 'page');
+
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Members and invitations' })).toBeVisible();
+
+    // Build a fresh client-navigation history after the reload. Next.js may
+    // reconstruct its internal history entry while hydrating a reloaded page;
+    // link-created entries are the behavior users rely on for back/forward.
+    await workspaceNavigation.getByRole('link', { name: /Model card studio/ }).click();
+    await expect(page).toHaveURL(/\/modelops$/);
+    await workspaceNavigation.getByRole('link', { name: /^Team/ }).click();
+    await expect(page).toHaveURL(/\/settings\/members$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/modelops$/);
+    await expect(workspaceNavigation.getByRole('link', { name: /Model card studio/ })).toHaveAttribute('aria-current', 'page');
+    await page.goForward();
+    await expect(page).toHaveURL(/\/settings\/members$/);
+  });
+
+  test('keeps mobile navigation keyboard-operable without horizontal overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto('/login');
+    await signIn(page, fixture!.user, /\/modelops$/);
+
+    const trigger = page.getByRole('button', { name: 'Open workspace navigation' });
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: 'Workspace navigation' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('link', { name: /Model card studio/ })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+
+    const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+    expect(hasHorizontalOverflow).toBe(false);
+    expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
+
+    await trigger.click();
+    await dialog.getByRole('link', { name: /^Team/ }).click();
+    await expect(page).toHaveURL(/\/settings\/members$/);
+    await expect(dialog).toBeHidden();
+  });
+
   test('onboards a confirmed user into one initial organization', async ({ page }) => {
     await page.goto('/login?next=%2Fonboarding');
     await signIn(page, fixture!.onboardingUser, /\/onboarding$/);
@@ -212,6 +264,7 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     await page.getByRole('button', { name: 'Accept organization invitation' }).click();
     expect((await acceptanceResponse).status(), 'Invitation acceptance must succeed').toBe(200);
     await expect(page).toHaveURL(/\/modelops$/, { timeout: 30_000 });
+    await expect(page.getByRole('navigation', { name: 'Workspace navigation' }).getByRole('link', { name: /^Team/ })).toHaveCount(0);
 
     await page.goto('/settings/members');
     await expect(page).toHaveURL(/\/forbidden$/);
@@ -246,5 +299,71 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     await expect(page.locator('article')
       .filter({ hasText: fixture!.invitedUser.email })
       .filter({ hasText: 'revoked' })).toBeVisible();
+  });
+
+  test('switches organizations without retaining records or navigation from the previous tenant', async ({ page }) => {
+    test.slow();
+    await page.goto('/login');
+    await signIn(page, fixture!.user, /\/modelops$/);
+
+    const markerName = `Tenant boundary marker ${crypto.randomUUID()}`;
+    const created = await page.request.post('/api/modelops', {
+      headers: { 'Idempotency-Key': crypto.randomUUID() },
+      data: {
+        model_name: markerName,
+        version: '1.0.0',
+        dataset: 'tenant-boundary-browser-test',
+        intended_use: 'Verify active-organization isolation in the protected application shell.',
+      },
+    });
+    expect(created.status(), await created.text()).toBe(200);
+    await page.reload();
+    await expect(page.getByText(markerName, { exact: true })).toBeVisible();
+
+    const secondOrganization = await fixture!.admin
+      .from('organizations')
+      .insert({ name: `ModelOps alternate tenant ${crypto.randomUUID()}` })
+      .select('id')
+      .single();
+    expect(secondOrganization.error, JSON.stringify(secondOrganization.error)).toBeNull();
+    const secondOrganizationId = secondOrganization.data!.id;
+
+    try {
+      const membership = await fixture!.admin.from('memberships').insert({
+        organization_id: secondOrganizationId,
+        user_id: fixture!.user.id,
+        role: 'viewer',
+      });
+      expect(membership.error, JSON.stringify(membership.error)).toBeNull();
+
+      const activateOriginal = await page.request.post('/api/organization/active', { data: { organization_id: fixture!.organizationId } });
+      expect(activateOriginal.status(), await activateOriginal.text()).toBe(200);
+      await page.reload();
+
+      const organizationSelector = page.locator('header').getByLabel('Active organization');
+      await expect(organizationSelector.locator('option')).toHaveCount(2);
+      const switchResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/organization/active');
+      const switchedDocument = page.waitForEvent('load');
+      await organizationSelector.selectOption(secondOrganizationId);
+      expect((await switchResponse).status()).toBe(200);
+      await switchedDocument;
+      await expect(page.locator('header').getByLabel('Active organization')).toHaveValue(secondOrganizationId);
+      await expect(page.getByText('No saved evaluations exist in this organization yet.')).toBeVisible();
+      await expect(page.getByText(markerName, { exact: true })).toHaveCount(0);
+      await expect(page.getByRole('navigation', { name: 'Workspace navigation' }).getByRole('link', { name: /^Team/ })).toHaveCount(0);
+
+      const returnResponse = page.waitForResponse((response) => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/organization/active');
+      const returnedDocument = page.waitForEvent('load');
+      await page.locator('header').getByLabel('Active organization').selectOption(fixture!.organizationId);
+      expect((await returnResponse).status()).toBe(200);
+      await returnedDocument;
+      await expect(page.locator('header').getByLabel('Active organization')).toHaveValue(fixture!.organizationId);
+      await expect(page.getByText(markerName, { exact: true })).toBeVisible();
+      await expect(page.getByRole('navigation', { name: 'Workspace navigation' }).getByRole('link', { name: /^Team/ })).toBeVisible();
+    } finally {
+      await page.request.post('/api/organization/active', { data: { organization_id: fixture!.organizationId } });
+      const cleanup = await fixture!.admin.from('organizations').delete().eq('id', secondOrganizationId);
+      expect(cleanup.error, JSON.stringify(cleanup.error)).toBeNull();
+    }
   });
 });

@@ -1,6 +1,4 @@
 import { redirect } from 'next/navigation';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
 import MemberAdministration from '@/components/settings/MemberAdministration';
 import { requireDefaultActor } from '@/lib/auth/actor';
 import { workspaceAccessRedirect } from '@/lib/auth/workspace-access';
@@ -14,12 +12,8 @@ export default async function MembersSettingsPage() {
     redirect(workspaceAccessRedirect(error, '/settings/members'));
   }
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-950">
-      <Navbar role="admin" />
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
-        <MemberAdministration />
-      </main>
-      <Footer />
+    <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
+      <MemberAdministration />
     </div>
   );
 }

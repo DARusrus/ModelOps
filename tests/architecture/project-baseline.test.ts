@@ -14,11 +14,11 @@ const pageRoutes = [
   ['/forgot-password', 'src/app/forgot-password/page.tsx'],
   ['/reset-password', 'src/app/reset-password/page.tsx'],
   ['/invite/accept', 'src/app/invite/accept/page.tsx'],
-  ['/modelops', 'src/app/modelops/page.tsx'],
+  ['/modelops', 'src/app/(workspace)/modelops/page.tsx'],
   ['/onboarding', 'src/app/onboarding/page.tsx'],
   ['/select-organization', 'src/app/select-organization/page.tsx'],
   ['/forbidden', 'src/app/forbidden/page.tsx'],
-  ['/settings/members', 'src/app/settings/members/page.tsx'],
+  ['/settings/members', 'src/app/(workspace)/settings/members/page.tsx'],
 ] as const;
 
 const apiRoutes = [
