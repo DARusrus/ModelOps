@@ -4,10 +4,11 @@ import { workspaceAccessRedirect } from '@/lib/auth/workspace-access';
 import ModelOpsWorkspace from './Workspace';
 
 export default async function ModelOpsWorkspacePage() {
+  let role: 'viewer' | 'editor' | 'reviewer' | 'admin';
   try {
-    await requireDefaultActor('read');
+    ({ role } = await requireDefaultActor('read'));
   } catch (error) {
     redirect(workspaceAccessRedirect(error, '/modelops'));
   }
-  return <ModelOpsWorkspace />;
+  return <ModelOpsWorkspace role={role} />;
 }

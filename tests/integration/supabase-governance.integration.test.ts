@@ -1,10 +1,61 @@
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import nodeFetch from 'node-fetch';
+import { createAbortDeadline } from '../../src/lib/network/timeout';
 
 const CONFIRMATION = 'RUN_ON_DISPOSABLE_TEST_PROJECT';
 const enabled = process.env.RUN_SUPABASE_INTEGRATION === 'true';
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+const READ_REQUEST_TIMEOUT_MS = 5_000;
+const MUTATION_REQUEST_TIMEOUT_MS = 15_000;
+const nodeFetchTransport = nodeFetch as unknown as typeof fetch;
+
+/** The live integration runner uses node-fetch instead of Node 22's bundled
+ * Undici transport. On Windows the latter can intermittently stall against
+ * the Supabase gateway; this adapter remains test-only and request-bounded.
+ * Internal read deadlines become retryable transport errors, while caller
+ * cancellation stays an AbortError and mutations remain single-attempt. */
+const integrationFetch: typeof fetch = async (input, init) => {
+  const method = init?.method?.toUpperCase() ?? 'GET';
+  const isRead = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+  const timeoutMs = isRead ? READ_REQUEST_TIMEOUT_MS : MUTATION_REQUEST_TIMEOUT_MS;
+  const deadline = createAbortDeadline(timeoutMs, init?.signal);
+  try {
+    return await nodeFetchTransport(input, { ...init, signal: deadline.signal });
+  } catch (error) {
+    const requestUrl = typeof input === 'string' ? new URL(input) : input instanceof URL ? input : new URL(input.url);
+    const transportError = error instanceof Error
+      ? error as Error & { code?: unknown; cause?: { code?: unknown } }
+      : undefined;
+    console.warn('[integration] Supabase transport failed', {
+      method,
+      path: requestUrl.pathname,
+      error_type: error instanceof Error ? error.name : 'UNKNOWN',
+      cause_code: typeof transportError?.code === 'string'
+        ? transportError.code
+        : typeof transportError?.cause?.code === 'string' ? transportError.cause.code : undefined,
+    });
+    if (deadline.didTimeout()) {
+      const timeoutError = new Error(`Supabase integration request timed out after ${timeoutMs}ms`);
+      timeoutError.name = 'IntegrationTimeoutError';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    deadline.dispose();
+  }
+};
+
+function integrationClientOptions() {
+  return {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+    // Supabase retries GET/HEAD/OPTIONS only. POST-based RPC mutations remain
+    // single-attempt and use explicit idempotency reconciliation where needed.
+    db: { retry: true },
+    global: { fetch: integrationFetch },
+  } as const;
+}
 
 type IntegrationConfig = {
   url: string;
@@ -22,6 +73,23 @@ type Fixture = {
   expiredCardAId: string;
   paginationCardIds: string[];
 };
+
+const TRANSIENT_RETRY_DELAYS_MS = [250, 1_000] as const;
+
+function isTransientTransportFailure(error: { message: string } | null): boolean {
+  return Boolean(error && /fetch failed|network error|timed?\s*out|aborted a request|ECONNRESET|ETIMEDOUT|UND_ERR_/i.test(error.message));
+}
+
+async function retryTransient<T extends { error: { message: string } | null }>(operation: string, request: () => PromiseLike<T>): Promise<T> {
+  let result = await request();
+  for (const delayMs of TRANSIENT_RETRY_DELAYS_MS) {
+    if (!isTransientTransportFailure(result.error)) return result;
+    console.warn(`[integration] ${operation} hit a transient transport failure; retrying in ${delayMs}ms.`);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    result = await request();
+  }
+  return result;
+}
 
 function integrationConfig(): IntegrationConfig {
   const url = process.env.SUPABASE_INTEGRATION_URL;
@@ -57,7 +125,7 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
 
   beforeAll(async () => {
     const config = integrationConfig();
-    const admin = createClient(config.url, config.serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
+    const admin = createClient(config.url, config.serviceRoleKey, integrationClientOptions());
     const runId = crypto.randomUUID();
     const password = `ModelOps-${crypto.randomUUID()}-safe`;
     const createdUserA = await admin.auth.admin.createUser({ email: `modelops-a-${runId}@example.test`, password, email_confirm: true });
@@ -66,23 +134,28 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
     if (createdUserB.error || !createdUserB.data.user) throw new Error(`create user B: ${createdUserB.error?.message || 'no user returned'}`);
     const userA = createdUserA.data.user;
     const userB = createdUserB.data.user;
-    const organizationA = await requireData<{ id: string }>(await admin.from('organizations').insert({ name: `ModelOps integration A ${runId}` }).select('id').single(), 'create organization A');
-    const organizationB = await requireData<{ id: string }>(await admin.from('organizations').insert({ name: `ModelOps integration B ${runId}` }).select('id').single(), 'create organization B');
-    const membership = await admin.from('memberships').insert([
+    const organizationAId = crypto.randomUUID();
+    const organizationBId = crypto.randomUUID();
+    const organizationA = await requireData<{ id: string }>(await retryTransient('create organization A', () => admin.from('organizations').upsert({ id: organizationAId, name: `ModelOps integration A ${runId}` }, { onConflict: 'id' }).select('id').single()), 'create organization A');
+    const organizationB = await requireData<{ id: string }>(await retryTransient('create organization B', () => admin.from('organizations').upsert({ id: organizationBId, name: `ModelOps integration B ${runId}` }, { onConflict: 'id' }).select('id').single()), 'create organization B');
+    const membership = await retryTransient('create memberships', () => admin.from('memberships').upsert([
       { organization_id: organizationA.id, user_id: userA.id, role: 'admin' },
       { organization_id: organizationB.id, user_id: userB.id, role: 'viewer' },
-    ]);
+    ], { onConflict: 'organization_id,user_id' }));
     if (membership.error) throw new Error(`create memberships: ${membership.error.message}`);
 
     const payload = { model_name: 'Integration model', version: '1.0.0', evidence_items: [] };
-    const cardA = await requireData<{ id: string }>(await admin.from('model_cards').insert({ organization_id: organizationA.id, created_by: userA.id, payload, readiness_score: 50, rubric_version: 'integration', workflow_state: 'draft' }).select('id').single(), 'create active card');
-    const expiredCardA = await requireData<{ id: string }>(await admin.from('model_cards').insert({ organization_id: organizationA.id, created_by: userA.id, payload, readiness_score: 50, rubric_version: 'integration', workflow_state: 'draft', expires_at: new Date(Date.now() - 60_000).toISOString() }).select('id').single(), 'create expired card');
+    const cardAId = crypto.randomUUID();
+    const expiredCardAId = crypto.randomUUID();
+    const cardA = await requireData<{ id: string }>(await retryTransient('create active card', () => admin.from('model_cards').upsert({ id: cardAId, organization_id: organizationA.id, created_by: userA.id, payload, readiness_score: 50, rubric_version: 'integration', workflow_state: 'draft' }, { onConflict: 'id' }).select('id').single()), 'create active card');
+    const expiredCardA = await requireData<{ id: string }>(await retryTransient('create expired card', () => admin.from('model_cards').upsert({ id: expiredCardAId, organization_id: organizationA.id, created_by: userA.id, payload, readiness_score: 50, rubric_version: 'integration', workflow_state: 'draft', expires_at: new Date(Date.now() - 60_000).toISOString() }, { onConflict: 'id' }).select('id').single()), 'create expired card');
     const paginationTime = Date.now() + 60_000;
-    const paginationCards = await requireData<{ id: string }[]>(await admin.from('model_cards').insert([
-      { organization_id: organizationA.id, created_by: userA.id, payload: { model_name: 'Page A', version: '1.0.0', evidence_items: [] }, readiness_score: 50, rubric_version: 'integration', workflow_state: 'draft', created_at: new Date(paginationTime).toISOString() },
-      { organization_id: organizationA.id, created_by: userA.id, payload: { model_name: 'Page B', version: '1.0.0', evidence_items: [] }, readiness_score: 50, rubric_version: 'integration', workflow_state: 'draft', created_at: new Date(paginationTime).toISOString() },
-      { organization_id: organizationA.id, created_by: userA.id, payload: { model_name: 'Page C', version: '1.0.0', evidence_items: [] }, readiness_score: 50, rubric_version: 'integration', workflow_state: 'draft', created_at: new Date(paginationTime - 1_000).toISOString() },
-    ]).select('id'), 'create paginated cards');
+    const paginationCardIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+    const paginationCards = await requireData<{ id: string }[]>(await retryTransient('create paginated cards', () => admin.from('model_cards').upsert([
+      { id: paginationCardIds[0], organization_id: organizationA.id, created_by: userA.id, payload: { model_name: 'Page A', version: '1.0.0', evidence_items: [] }, readiness_score: 50, rubric_version: 'integration', workflow_state: 'draft', created_at: new Date(paginationTime).toISOString() },
+      { id: paginationCardIds[1], organization_id: organizationA.id, created_by: userA.id, payload: { model_name: 'Page B', version: '1.0.0', evidence_items: [] }, readiness_score: 50, rubric_version: 'integration', workflow_state: 'draft', created_at: new Date(paginationTime).toISOString() },
+      { id: paginationCardIds[2], organization_id: organizationA.id, created_by: userA.id, payload: { model_name: 'Page C', version: '1.0.0', evidence_items: [] }, readiness_score: 50, rubric_version: 'integration', workflow_state: 'draft', created_at: new Date(paginationTime - 1_000).toISOString() },
+    ], { onConflict: 'id' }).select('id')), 'create paginated cards');
     fixture = {
       admin,
       userA: { id: userA.id, email: userA.email!, password },
@@ -104,8 +177,8 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
 
   async function signedInClient(user: { email: string; password: string }) {
     const config = integrationConfig();
-    const client = createClient(config.url, config.publishableKey, { auth: { autoRefreshToken: false, persistSession: false } });
-    const signedIn = await client.auth.signInWithPassword({ email: user.email, password: user.password });
+    const client = createClient(config.url, config.publishableKey, integrationClientOptions());
+    const signedIn = await retryTransient('sign in integration user', () => client.auth.signInWithPassword({ email: user.email, password: user.password }));
     if (signedIn.error) throw new Error(`sign in integration user: ${signedIn.error.message}`);
     return client;
   }
@@ -116,7 +189,7 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
     const ownerRead = await owner.from('model_cards').select('id').eq('id', fixture.cardAId).maybeSingle();
     expect(ownerRead.error).toBeNull();
     expect(ownerRead.data?.id).toBe(fixture.cardAId);
-    const emptyChainIntegrity = await owner.rpc('verify_model_card_attestations', { target_card: fixture.cardAId });
+    const emptyChainIntegrity = await retryTransient('verify empty attestation chain', () => owner.rpc('verify_model_card_attestations', { target_card: fixture.cardAId }));
     expect(emptyChainIntegrity.error, JSON.stringify(emptyChainIntegrity.error)).toBeNull();
     expect(emptyChainIntegrity.data).toMatchObject({ valid: true, checked_events: 0 });
     const expiredRead = await owner.from('model_cards').select('id').eq('id', fixture.expiredCardAId).maybeSingle();
@@ -249,13 +322,26 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
       card_readiness_score: 25,
       card_rubric_version: 'integration',
     });
-    expect(persisted.error).toBeNull();
-    expect(persisted.data).toMatchObject({ model_name: payload.model_name, record_id: expect.any(String) });
+
+    // A timed-out mutation may have committed after its response was lost.
+    // Reconcile through the same idempotency claim; never execute the write a
+    // second time when its outcome is uncertain.
+    let persistedBody = persisted.data;
+    if (isTransientTransportFailure(persisted.error)) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const reconciled = await retryTransient('reconcile timed-out model-card persistence', () => fixture.admin.rpc('claim_idempotency', claimArgs));
+      expect(reconciled.error, JSON.stringify(reconciled.error)).toBeNull();
+      expect(reconciled.data?.action).toBe('replay');
+      persistedBody = reconciled.data?.response_body ?? null;
+    } else {
+      expect(persisted.error).toBeNull();
+    }
+    expect(persistedBody).toMatchObject({ model_name: payload.model_name, record_id: expect.any(String) });
 
     const replay = await fixture.admin.rpc('claim_idempotency', claimArgs);
     expect(replay.error).toBeNull();
-    expect(replay.data).toMatchObject({ action: 'replay', response_status: 200, response_body: { record_id: persisted.data.record_id } });
-    const stored = await fixture.admin.from('model_cards').select('id').eq('id', persisted.data.record_id);
+    expect(replay.data).toMatchObject({ action: 'replay', response_status: 200, response_body: { record_id: persistedBody!.record_id } });
+    const stored = await fixture.admin.from('model_cards').select('id').eq('id', persistedBody!.record_id);
     expect(stored.error).toBeNull();
     expect(stored.data).toHaveLength(1);
   });
@@ -373,7 +459,7 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
 
   it('creates one confirmed-user workspace atomically without caller-controlled identity or role', async () => {
     const config = integrationConfig();
-    const anonymous = createClient(config.url, config.publishableKey, { auth: { autoRefreshToken: false, persistSession: false } });
+    const anonymous = createClient(config.url, config.publishableKey, integrationClientOptions());
     const unauthenticated = await anonymous.rpc('create_initial_workspace', { workspace_name: 'Unauthorized workspace' });
     expect(unauthenticated.error).not.toBeNull();
 
@@ -422,5 +508,143 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
       await fixture.admin.from('organizations').delete().eq('created_by', user.id);
       await fixture.admin.auth.admin.deleteUser(user.id);
     }
+  });
+
+  it('enforces invitation acceptance, role administration, tenant isolation, and final-admin safety', async () => {
+    const owner = await signedInClient(fixture.userA);
+    const invitedUser = await signedInClient(fixture.userB);
+
+    const directCreate = await retryTransient('reject direct invitation creation', () => owner.rpc('create_organization_invitation_as', {
+      requesting_actor: fixture.userA.id,
+      target_organization: fixture.organizationAId,
+      target_email: fixture.userB.email,
+      requested_role: 'reviewer',
+    }));
+    expect(directCreate.error?.code).toBe('42501');
+
+    const createArgs = {
+      requesting_actor: fixture.userA.id,
+      target_organization: fixture.organizationAId,
+      target_email: fixture.userB.email.toUpperCase(),
+      requested_role: 'reviewer',
+    };
+    const concurrentCreates = await Promise.all([
+      fixture.admin.rpc('create_organization_invitation_as', createArgs),
+      fixture.admin.rpc('create_organization_invitation_as', createArgs),
+    ]);
+    requireSuccessfulCalls(concurrentCreates, 'concurrent invitation creation');
+    const invitationIds = concurrentCreates.map((result) => result.data![0].invitation_id);
+    expect(new Set(invitationIds).size).toBe(1);
+    const invitationId = invitationIds[0];
+
+    const outsiderRead = await invitedUser.from('organization_invitations').select('id').eq('id', invitationId).maybeSingle();
+    expect(outsiderRead.error).toBeNull();
+    expect(outsiderRead.data).toBeNull();
+
+    const mismatchedAcceptance = await retryTransient('reject mismatched invitation acceptance', () => owner.rpc('accept_organization_invitation', { target_invitation: invitationId }));
+    expect(mismatchedAcceptance.error?.message).toBe('INVITATION_EMAIL_MISMATCH');
+
+    const accepted = await Promise.all([
+      invitedUser.rpc('accept_organization_invitation', { target_invitation: invitationId }),
+      invitedUser.rpc('accept_organization_invitation', { target_invitation: invitationId }),
+    ]);
+    requireSuccessfulCalls(accepted, 'concurrent invitation acceptance');
+    expect(accepted.map((result) => result.data?.[0].organization_id)).toEqual([fixture.organizationAId, fixture.organizationAId]);
+    expect(accepted.filter((result) => result.data?.[0].accepted)).toHaveLength(1);
+
+    const membership = await fixture.admin.from('memberships').select('user_id, role').eq('organization_id', fixture.organizationAId).eq('user_id', fixture.userB.id);
+    expect(membership.error).toBeNull();
+    expect(membership.data).toEqual([{ user_id: fixture.userB.id, role: 'reviewer' }]);
+
+    const listedMembers = await fixture.admin.rpc('list_organization_members_as', {
+      requesting_actor: fixture.userA.id,
+      target_organization: fixture.organizationAId,
+    });
+    expect(listedMembers.error).toBeNull();
+    expect(listedMembers.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ user_id: fixture.userA.id, email: fixture.userA.email, role: 'admin' }),
+      expect.objectContaining({ user_id: fixture.userB.id, email: fixture.userB.email, role: 'reviewer' }),
+    ]));
+
+    const reviewerInvitationRead = await invitedUser.from('organization_invitations').select('id').eq('id', invitationId).maybeSingle();
+    expect(reviewerInvitationRead.error).toBeNull();
+    expect(reviewerInvitationRead.data).toBeNull();
+
+    const nonAdminEscalation = await invitedUser.rpc('change_organization_member_role_as', {
+      requesting_actor: fixture.userB.id,
+      target_organization: fixture.organizationAId,
+      target_user: fixture.userB.id,
+      requested_role: 'admin',
+    });
+    expect(nonAdminEscalation.error).not.toBeNull();
+
+    const changed = await fixture.admin.rpc('change_organization_member_role_as', {
+      requesting_actor: fixture.userA.id,
+      target_organization: fixture.organizationAId,
+      target_user: fixture.userB.id,
+      requested_role: 'editor',
+    });
+    expect(changed.error).toBeNull();
+    expect(changed.data).toMatchObject({ role: 'editor' });
+
+    const finalAdmin = await fixture.admin.rpc('change_organization_member_role_as', {
+      requesting_actor: fixture.userA.id,
+      target_organization: fixture.organizationAId,
+      target_user: fixture.userA.id,
+      requested_role: 'reviewer',
+    });
+    expect(finalAdmin.error?.message).toBe('FINAL_ADMIN_REQUIRED');
+
+    const removed = await fixture.admin.rpc('remove_organization_member_as', {
+      requesting_actor: fixture.userA.id,
+      target_organization: fixture.organizationAId,
+      target_user: fixture.userB.id,
+    });
+    expect(removed.error).toBeNull();
+    const removedMembership = await fixture.admin.from('memberships').select('user_id').eq('organization_id', fixture.organizationAId).eq('user_id', fixture.userB.id).maybeSingle();
+    expect(removedMembership.data).toBeNull();
+
+    const revocable = await fixture.admin.rpc('create_organization_invitation_as', {
+      requesting_actor: fixture.userA.id,
+      target_organization: fixture.organizationAId,
+      target_email: fixture.userB.email,
+      requested_role: 'viewer',
+    });
+    expect(revocable.error).toBeNull();
+    const revoked = await fixture.admin.rpc('revoke_organization_invitation_as', {
+      requesting_actor: fixture.userA.id,
+      target_invitation: revocable.data![0].invitation_id,
+    });
+    expect(revoked.error).toBeNull();
+    const revokedAcceptance = await retryTransient('reject revoked invitation acceptance', () => invitedUser.rpc('accept_organization_invitation', { target_invitation: revocable.data![0].invitation_id }));
+    expect(revokedAcceptance.error?.message).toBe('INVITATION_NOT_PENDING');
+
+    const expiring = await fixture.admin.rpc('create_organization_invitation_as', {
+      requesting_actor: fixture.userA.id,
+      target_organization: fixture.organizationAId,
+      target_email: fixture.userB.email,
+      requested_role: 'viewer',
+    });
+    expect(expiring.error).toBeNull();
+    const expiredAt = new Date(Date.now() - 60_000).toISOString();
+    const forcedExpiry = await fixture.admin
+      .from('organization_invitations')
+      .update({ expires_at: expiredAt })
+      .eq('id', expiring.data![0].invitation_id);
+    expect(forcedExpiry.error).toBeNull();
+    const expiredAcceptance = await retryTransient('reject expired invitation acceptance', () => invitedUser.rpc(
+      'accept_organization_invitation',
+      { target_invitation: expiring.data![0].invitation_id },
+    ));
+    expect(expiredAcceptance.error?.message).toBe('INVITATION_EXPIRED');
+
+    const audit = await fixture.admin.from('audit_events')
+      .select('event_type')
+      .eq('organization_id', fixture.organizationAId)
+      .in('event_type', ['organization_invitation_created', 'organization_invitation_accepted', 'organization_member_role_changed', 'organization_member_removed', 'organization_invitation_revoked']);
+    expect(audit.error).toBeNull();
+    expect(new Set(audit.data?.map((event) => event.event_type))).toEqual(new Set([
+      'organization_invitation_created', 'organization_invitation_accepted', 'organization_member_role_changed', 'organization_member_removed', 'organization_invitation_revoked',
+    ]));
   });
 });

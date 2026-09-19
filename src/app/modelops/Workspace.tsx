@@ -18,7 +18,7 @@ import { ArrowLeft, RotateCcw, LayoutGrid, RefreshCw, SearchX } from 'lucide-rea
 import { ApiClientError, requestJson } from '@/lib/client/api';
 import SavedEvaluations from '@/components/modelops/SavedEvaluations';
 
-export default function ModelOpsWorkspace() {
+export default function ModelOpsWorkspace({ role }: { role: 'viewer' | 'editor' | 'reviewer' | 'admin' }) {
   const [uiState, setUiState] = useState<UIState>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -152,6 +152,7 @@ export default function ModelOpsWorkspace() {
       <div className="min-h-screen flex flex-col bg-[#FAFAFA] text-gray-900 font-sans antialiased">
         {/* Navigation Bar */}
         <Navbar
+          role={role}
           onScrollToForm={scrollToForm}
           onScrollToHistory={scrollToHistory}
         />

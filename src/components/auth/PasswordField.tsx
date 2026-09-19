@@ -9,9 +9,17 @@ interface PasswordFieldProps {
   value: string;
   onChange: (value: string) => void;
   autoComplete: 'current-password' | 'new-password';
+  required?: boolean;
 }
 
-export default function PasswordField({ id, label, value, onChange, autoComplete }: PasswordFieldProps) {
+export default function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  autoComplete,
+  required = true,
+}: PasswordFieldProps) {
   const [visible, setVisible] = useState(false);
 
   return (
@@ -20,7 +28,7 @@ export default function PasswordField({ id, label, value, onChange, autoComplete
       <div className="relative">
         <input
           id={id}
-          required
+          required={required}
           type={visible ? 'text' : 'password'}
           value={value}
           onChange={(event) => onChange(event.target.value)}
