@@ -11,7 +11,8 @@ describe('stored evaluation boundary', () => {
     expect(() => parseStoredEvaluations([{ id: 'bad', payload: {}, created_at: 'today', expires_at: 'never' }])).toThrow();
   });
   it('returns a list-safe summary without parsing a full card payload', () => {
-    const summaries = parseStoredEvaluationSummaries([{ id: '00000000-0000-4000-8000-000000000001', model_name: 'A', model_version: '1', readiness_score: 50, created_at: '2026-09-03T00:00:00.000+00:00', expires_at: '2027-09-03T00:00:00.000+00:00' }]);
+    const summaries = parseStoredEvaluationSummaries([{ id: '00000000-0000-4000-8000-000000000001', model_name: 'A', model_version: '1', readiness_score: 50, workflow_state: 'draft', created_by: '00000000-0000-4000-8000-000000000010', created_at: '2026-09-03T00:00:00.000+00:00', expires_at: '2027-09-03T00:00:00.000+00:00' }]);
     expect(summaries[0].model_name).toBe('A');
+    expect(summaries[0]).not.toHaveProperty('payload');
   });
 });

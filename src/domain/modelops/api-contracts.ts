@@ -21,6 +21,40 @@ export const UuidSchema = z.string().uuid();
 export const TimestampSchema = z.string().datetime({ offset: true });
 export const GovernancePolicyIdSchema = z.enum(['healthcare_ai', 'fin_fraud_ai', 'genai_llm_ai', 'cv_edge_ai', 'enterprise_general']);
 export const ReviewModeSchema = z.enum(['self_attestation', 'independent_review']);
+export const EvaluationSortSchema = z.enum(['newest', 'oldest']);
+const DateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use an ISO date in YYYY-MM-DD format').refine(
+  (value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
+  },
+  'Date is invalid',
+);
+const EvaluationSearchSchema = z.string().trim().min(1).max(100).refine(
+  (value) => !/[(),"'%*\\]/.test(value),
+  'Search contains reserved filter characters',
+);
+
+/** URL query contract for the tenant-scoped saved-evaluation catalog. */
+export const EvaluationCatalogQuerySchema = z.object({
+  q: EvaluationSearchSchema.optional(),
+  state: WorkflowStateSchema.optional(),
+  creator: z.union([z.literal('me'), UuidSchema]).optional(),
+  created_from: DateOnlySchema.optional(),
+  created_to: DateOnlySchema.optional(),
+  readiness_min: z.coerce.number().int().min(0).max(100).optional(),
+  readiness_max: z.coerce.number().int().min(0).max(100).optional(),
+  sort: EvaluationSortSchema.default('newest'),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  cursor: z.string().min(1).max(512).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.created_from && value.created_to && value.created_from > value.created_to) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['created_to'], message: 'End date must not precede start date' });
+  }
+  if (value.readiness_min !== undefined && value.readiness_max !== undefined && value.readiness_min > value.readiness_max) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['readiness_max'], message: 'Maximum readiness must be at least the minimum' });
+  }
+});
+export type EvaluationCatalogQuery = z.infer<typeof EvaluationCatalogQuerySchema>;
 
 /** Request body for creating a model-card evaluation. */
 export const ExperimentMetadataSchema = z.object({
@@ -77,14 +111,24 @@ export const CompareRunsOutputSchema = z.object({
 }).strict();
 
 export const EvaluationSummarySchema = z.object({
-  id: UuidSchema, model_name: z.string().min(1), version: z.string().min(1), readiness_score: z.number().min(0).max(100), created_at: TimestampSchema, expires_at: TimestampSchema,
+  id: UuidSchema,
+  model_name: z.string().min(1),
+  version: z.string().min(1),
+  readiness_score: z.number().min(0).max(100),
+  workflow_state: WorkflowStateSchema,
+  created_by: UuidSchema,
+  created_at: TimestampSchema,
+  expires_at: TimestampSchema,
 }).strict();
+export type EvaluationSummary = z.infer<typeof EvaluationSummarySchema>;
 export const EvaluationListResponseSchema = z.object({
   success: z.literal(true), evaluations: z.array(EvaluationSummarySchema), page_size: z.number().int().min(1).max(50), has_more: z.boolean(), next_cursor: z.string().nullable(),
 }).strict();
+export type EvaluationListResponse = z.infer<typeof EvaluationListResponseSchema>;
 export const EvaluationCreateResponseSchema = ModelCardOutputSchema.extend({ record_id: UuidSchema }).strict();
 export const EvaluationDetailSchema = ModelCardOutputSchema.extend({ id: UuidSchema, workflow_state: WorkflowStateSchema, created_at: TimestampSchema, expires_at: TimestampSchema }).strict();
 export const EvaluationDetailResponseSchema = z.object({ success: z.literal(true), evaluation: EvaluationDetailSchema }).strict();
+export type EvaluationDetailResponse = z.infer<typeof EvaluationDetailResponseSchema>;
 export const ComparisonResponseSchema = z.object({ success: z.literal(true), comparison: CompareRunsOutputSchema }).strict();
 
 export const PolicySchema = z.object({

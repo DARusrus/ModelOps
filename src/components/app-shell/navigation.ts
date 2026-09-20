@@ -9,9 +9,15 @@ export interface WorkspaceNavigationItem {
 
 const navigationItems: readonly WorkspaceNavigationItem[] = [
   {
-    href: '/modelops',
-    label: 'Model card studio',
-    description: 'Create, inspect, and compare governed evaluations.',
+    href: '/evaluations',
+    label: 'Evaluations',
+    description: 'Search, create, and inspect governed dossiers.',
+  },
+  {
+    href: '/compare',
+    label: 'Compare',
+    description: 'Diff two persisted evaluation records.',
+    roles: ['editor', 'reviewer', 'admin'],
   },
   {
     href: '/settings/members',

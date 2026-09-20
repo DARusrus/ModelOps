@@ -9,6 +9,7 @@ import SignOutButton from '@/components/auth/SignOutButton';
 import { requestJson } from '@/lib/client/api';
 import type { WorkspaceContext } from '@/lib/auth/workspace-context';
 import { isNavigationItemActive, navigationItemsForRole } from './navigation';
+import { WorkspaceAccessProvider } from './WorkspaceAccessContext';
 
 const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2';
 
@@ -63,7 +64,7 @@ function OrganizationSelector({ context, compact = false }: { context: Workspace
       // An organization change is a tenant boundary. A document replacement
       // clears every organization-scoped client cache and component state
       // after the server has committed the new secure selection cookie.
-      window.location.replace('/modelops');
+      window.location.replace('/evaluations');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Organization could not be switched.');
       setSwitching(false);
@@ -142,7 +143,7 @@ export default function AppShell({ context, children }: { context: WorkspaceCont
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
 
-          <Link href="/modelops" className={`flex min-w-0 items-center gap-3 rounded ${focusRing}`}>
+          <Link href="/evaluations" className={`flex min-w-0 items-center gap-3 rounded ${focusRing}`}>
             <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-emerald-800 text-white">
               <ShieldCheck className="h-5 w-5" aria-hidden="true" />
             </span>
@@ -190,7 +191,9 @@ export default function AppShell({ context, children }: { context: WorkspaceCont
             tabIndex={-1}
             className="min-h-[60vh] outline-none"
           >
-            {children}
+            <WorkspaceAccessProvider role={context.activeOrganization.role}>
+              {children}
+            </WorkspaceAccessProvider>
           </main>
           <Footer />
         </div>

@@ -393,9 +393,14 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
   it('reads generated list projections with stable keyset pagination', async () => {
     const owner = await signedInClient(fixture.userA);
     const firstPage = await owner.from('model_cards')
-      .select('id, model_name, model_version, readiness_score, created_at, expires_at')
+      .select('id, model_name, model_version, readiness_score, workflow_state, created_by, created_at, expires_at')
       .eq('organization_id', fixture.organizationAId)
       .in('id', fixture.paginationCardIds)
+      .eq('workflow_state', 'draft')
+      .eq('created_by', fixture.userA.id)
+      .gte('readiness_score', 0)
+      .lte('readiness_score', 100)
+      .or('model_name.ilike.*Page*,model_version.ilike.*Page*')
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
@@ -403,14 +408,19 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
     expect(firstPage.error).toBeNull();
     expect(firstPage.data).toHaveLength(2);
     expect(firstPage.data?.every((card) => card.model_name?.startsWith('Page ') && card.model_version === '1.0.0')).toBe(true);
+    expect(Object.keys(firstPage.data![0]).sort()).toEqual(['created_at', 'created_by', 'expires_at', 'id', 'model_name', 'model_version', 'readiness_score', 'workflow_state']);
 
     const cursor = firstPage.data![1];
     const secondPage = await owner.from('model_cards')
-      .select('id, model_name, model_version, readiness_score, created_at, expires_at')
+      .select('id, model_name, model_version, readiness_score, workflow_state, created_by, created_at, expires_at')
       .eq('organization_id', fixture.organizationAId)
       .in('id', fixture.paginationCardIds)
+      .eq('workflow_state', 'draft')
+      .eq('created_by', fixture.userA.id)
+      .gte('readiness_score', 0)
+      .lte('readiness_score', 100)
       .gt('expires_at', new Date().toISOString())
-      .or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`)
+      .or(`and(or(model_name.ilike.*Page*,model_version.ilike.*Page*),or(created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})))`)
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .limit(2);

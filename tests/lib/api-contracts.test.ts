@@ -38,7 +38,7 @@ describe('canonical ModelOps API contracts', () => {
   it('validates list, comparison, and health success DTOs without allowing undeclared fields', () => {
     expect(EvaluationListResponseSchema.parse({
       success: true,
-      evaluations: [{ id, model_name: 'Canonical card', version: '1.0.0', readiness_score: 50, created_at: timestamp, expires_at: '2027-09-06T00:00:00.000+00:00' }],
+      evaluations: [{ id, model_name: 'Canonical card', version: '1.0.0', readiness_score: 50, workflow_state: 'draft', created_by: id, created_at: timestamp, expires_at: '2027-09-06T00:00:00.000+00:00' }],
       page_size: 20, has_more: false, next_cursor: null,
     }).evaluations).toHaveLength(1);
     expect(() => HealthResponseSchema.parse({ status: 'ok', checks: { database: 'ok' }, debug: 'leak' })).toThrow();

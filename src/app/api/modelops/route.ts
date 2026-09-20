@@ -10,6 +10,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { parseStoredEvaluationSummaries } from '@/lib/modelops/stored-evaluation';
 import { decodeEvaluationCursor, encodeEvaluationCursor, evaluationCursorFilter } from '@/lib/modelops/pagination';
+import { evaluationSearchFilter, inclusiveEndDate, parseEvaluationCatalogQuery } from '@/lib/modelops/catalog-query';
 import { consumeSharedRateLimit } from '@/lib/shared-rate-limit';
 import { env } from '@/lib/env';
 import { abandonIdempotency, claimIdempotency, idempotencyKey, requestFingerprint } from '@/lib/idempotency';
@@ -97,43 +98,51 @@ async function post(request: Request) {
   }
 }
 
-const DEFAULT_PAGE_SIZE = 20;
-const MAX_PAGE_SIZE = 50;
-
 async function get(request: Request) {
   try {
     const actor = await requireDefaultActor('read');
     const supabase = await createSupabaseServerClient();
     const url = new URL(request.url);
-    const requestedLimit = Number(url.searchParams.get('limit') || DEFAULT_PAGE_SIZE);
-    const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
-    const cursorValue = url.searchParams.get('cursor');
+    const catalogQuery = parseEvaluationCatalogQuery(url.searchParams);
     let cursor;
     try {
-      cursor = cursorValue ? decodeEvaluationCursor(cursorValue) : undefined;
+      cursor = catalogQuery.cursor ? decodeEvaluationCursor(catalogQuery.cursor) : undefined;
+      if (cursor && cursor.sort !== catalogQuery.sort) throw new Error('INVALID_CURSOR');
     } catch (error) {
       if (error instanceof Error && error.message === 'INVALID_CURSOR') return createErrorResponse('Pagination cursor is invalid', 400, undefined, 'INVALID_CURSOR');
       throw error;
     }
 
     let query = supabase.from('model_cards')
-      .select('id, model_name, model_version, readiness_score, created_at, expires_at')
+      .select('id, model_name, model_version, readiness_score, workflow_state, created_by, created_at, expires_at')
       .eq('organization_id', actor.organizationId)
       .gt('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false });
-    if (cursor) query = query.or(evaluationCursorFilter(cursor));
-    const { data, error } = await query.limit(limit + 1);
+      .order('created_at', { ascending: catalogQuery.sort === 'oldest' })
+      .order('id', { ascending: catalogQuery.sort === 'oldest' });
+    if (catalogQuery.state) query = query.eq('workflow_state', catalogQuery.state);
+    if (catalogQuery.creator) query = query.eq('created_by', catalogQuery.creator === 'me' ? actor.userId : catalogQuery.creator);
+    if (catalogQuery.created_from) query = query.gte('created_at', `${catalogQuery.created_from}T00:00:00.000Z`);
+    if (catalogQuery.created_to) query = query.lt('created_at', inclusiveEndDate(catalogQuery.created_to));
+    if (catalogQuery.readiness_min !== undefined) query = query.gte('readiness_score', catalogQuery.readiness_min);
+    if (catalogQuery.readiness_max !== undefined) query = query.lte('readiness_score', catalogQuery.readiness_max);
+    const searchFilter = catalogQuery.q ? evaluationSearchFilter(catalogQuery.q) : undefined;
+    const cursorFilter = cursor ? evaluationCursorFilter(cursor) : undefined;
+    if (searchFilter && cursorFilter) query = query.or(`and(or(${searchFilter}),or(${cursorFilter}))`);
+    else if (searchFilter) query = query.or(searchFilter);
+    else if (cursorFilter) query = query.or(cursorFilter);
+    const { data, error } = await query.limit(catalogQuery.limit + 1);
     if (error) return createErrorResponse('Saved evaluations could not be loaded', 503);
     try {
       const records = parseStoredEvaluationSummaries(data);
-      const hasMore = records.length > limit;
-      const page = records.slice(0, limit);
+      const hasMore = records.length > catalogQuery.limit;
+      const page = records.slice(0, catalogQuery.limit);
       const evaluations = page.map((item) => ({
         id: item.id,
         model_name: item.model_name,
         version: item.model_version,
         readiness_score: item.readiness_score,
+        workflow_state: item.workflow_state,
+        created_by: item.created_by,
         created_at: item.created_at,
         expires_at: item.expires_at,
       }));
@@ -141,9 +150,9 @@ async function get(request: Request) {
       return createSuccessResponse(EvaluationListResponseSchema, {
         success: true,
         evaluations,
-        page_size: limit,
+        page_size: catalogQuery.limit,
         has_more: hasMore,
-        next_cursor: hasMore && last ? encodeEvaluationCursor({ createdAt: last.created_at, id: last.id }) : null,
+        next_cursor: hasMore && last ? encodeEvaluationCursor({ createdAt: last.created_at, id: last.id, sort: catalogQuery.sort }) : null,
       });
     } catch {
       logger.error('[API /api/modelops] Stored evaluation contract violation');
@@ -152,6 +161,15 @@ async function get(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     if (error instanceof Error && ['FORBIDDEN', 'ORGANIZATION_SELECTION_REQUIRED'].includes(error.message)) return createErrorResponse('You are not authorized for this organization', 403);
+    if (error instanceof Error && error.message === 'INVALID_CATALOG_QUERY') return createErrorResponse('Catalog query is invalid', 400, undefined, 'VALIDATION_FAILED');
+    if (error instanceof ZodError) {
+      return createErrorResponse(
+        'Catalog query is invalid',
+        400,
+        error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })),
+        'VALIDATION_FAILED',
+      );
+    }
     logger.error('[API /api/modelops] Read authorization failure', error);
     return createErrorResponse('Saved evaluations could not be loaded', 500, undefined, 'INTERNAL_ERROR');
   }
