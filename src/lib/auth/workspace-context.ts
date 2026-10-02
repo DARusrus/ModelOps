@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { ACTIVE_ORGANIZATION_COOKIE } from '@/lib/auth/active-organization';
 import { canPerform, type Role } from '@/lib/auth/permissions';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getVerifiedUser } from '@/lib/supabase/verified-user';
 
 export interface WorkspaceOrganization {
   id: string;
@@ -22,8 +23,8 @@ export interface WorkspaceContext {
  */
 export async function requireWorkspaceContext(permission = 'read'): Promise<WorkspaceContext> {
   const supabase = await createSupabaseServerClient();
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-  if (userError || !user) throw new Error('UNAUTHENTICATED');
+  const user = await getVerifiedUser(supabase);
+  if (!user) throw new Error('UNAUTHENTICATED');
 
   const { data: memberships, error: membershipsError } = await supabase
     .from('memberships')

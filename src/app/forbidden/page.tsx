@@ -13,7 +13,7 @@ export default function ForbiddenPage() {
           Your role in the active organization does not permit this action. You can return to the workspace, select another organization, or ask an administrator to update your role.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
-          <Link href="/modelops" className={actionClass}>Return to workspace</Link>
+          <Link href="/dashboard" className={actionClass}>Return to workspace</Link>
           <Link href="/select-organization" className={actionClass}>Switch organization</Link>
           <Link href="/modelops#faq" className={actionClass}>Open help</Link>
         </div>

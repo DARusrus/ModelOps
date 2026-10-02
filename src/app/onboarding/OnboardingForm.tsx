@@ -20,7 +20,7 @@ export default function OnboardingForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspace_name: name }),
       });
-      router.replace('/modelops');
+      router.replace('/dashboard');
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Workspace could not be created.');

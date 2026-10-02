@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import axe from 'axe-core';
 import { readFile } from 'node:fs/promises';
 import { createBrowserFixture, removeBrowserFixture, type BrowserFixture } from './fixtures';
+import { signInBrowserUser, signOutBrowserUser } from './auth';
 
 const enabled = process.env.RUN_MODELOPS_BROWSER_E2E === 'true';
 
@@ -22,40 +23,6 @@ async function scanSeriousAndCriticalViolations(page: import('@playwright/test')
   });
 }
 
-async function signIn(
-  page: import('@playwright/test').Page,
-  user: BrowserFixture['user'],
-  expectedPath: RegExp,
-) {
-  await page.getByLabel('Email').fill(user.email);
-  await page.getByLabel('Password', { exact: true }).fill(user.password);
-  const tokenResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return response.request().method() === 'POST'
-      && url.pathname === '/auth/v1/token'
-      && url.searchParams.get('grant_type') === 'password';
-  });
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  expect((await tokenResponse).status(), 'Supabase password authentication must succeed').toBe(200);
-  await expect(page).toHaveURL(expectedPath, { timeout: 30_000 });
-}
-
-async function signOut(page: import('@playwright/test').Page) {
-  const logoutResponse = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return response.request().method() === 'POST' && url.pathname === '/auth/v1/logout';
-  });
-  await page.getByLabel('Open account menu').click();
-  await page.getByRole('button', { name: 'Sign out' }).click();
-  const response = await logoutResponse;
-  expect(response.ok(), `Supabase sign-out must succeed (HTTP ${response.status()})`).toBe(true);
-  await expect(page).toHaveURL(/\/login$/, { timeout: 30_000 });
-
-  const authCookies = (await page.context().cookies())
-    .filter((cookie) => cookie.name.includes('-auth-token'));
-  expect(authCookies, 'Supabase authentication cookies must be cleared after sign-out').toEqual([]);
-}
-
 browserDescribe('ModelOps browser workflow (requires the disposable Supabase runner)', () => {
   let fixture: BrowserFixture | undefined;
 
@@ -70,7 +37,7 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     test.slow();
     await page.goto('/modelops');
     await expect(page).toHaveURL(/\/login(?:\?|$)/);
-    await signIn(page, fixture!.user, /\/modelops$/);
+    await signInBrowserUser(page, fixture!.user, /\/modelops$/);
     await page.getByRole('button', { name: 'Blank template' }).click();
     await page.getByLabel('Model name').fill('Browser validated model');
     await page.getByLabel('Version').fill('1.0.0');
@@ -164,7 +131,7 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     await expect(page.getByRole('link', { name: 'Create an account' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Forgot password?' })).toBeVisible();
     expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
-    await signIn(page, fixture!.user, /\/modelops$/);
+    await signInBrowserUser(page, fixture!.user, /\/dashboard$/);
     expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
   });
 
@@ -172,7 +139,7 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     test.slow();
     const modelName = `Permanent route model ${crypto.randomUUID()}`;
     await page.goto('/login');
-    await signIn(page, fixture!.user, /\/modelops$/);
+    await signInBrowserUser(page, fixture!.user, /\/dashboard$/);
     await page.getByRole('navigation', { name: 'Workspace navigation' }).getByRole('link', { name: /^Evaluations/ }).click();
     await expect(page).toHaveURL(/\/evaluations$/);
     await page.getByRole('link', { name: 'New evaluation' }).click();
@@ -208,15 +175,15 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     await expect(page.getByLabel('Model name or version')).toHaveValue(modelName);
     expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
 
-    await signOut(page);
-    await signIn(page, fixture!.user, /\/modelops$/);
+    await signOutBrowserUser(page);
+    await signInBrowserUser(page, fixture!.user, /\/dashboard$/);
     await page.goto(permanentEvaluationPath);
     await expect(page.getByRole('heading', { level: 2, name: new RegExp(`^${modelName} v2\\.0\\.0$`) })).toBeVisible();
   });
 
   test('keeps protected navigation URL-based, refresh-safe, and role-aware', async ({ page }) => {
     await page.goto('/login');
-    await signIn(page, fixture!.user, /\/modelops$/);
+    await signInBrowserUser(page, fixture!.user, /\/dashboard$/);
 
     const workspaceNavigation = page.getByRole('navigation', { name: 'Workspace navigation' });
     await workspaceNavigation.getByRole('link', { name: /^Evaluations/ }).click();
@@ -246,13 +213,13 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
   test('keeps mobile navigation keyboard-operable without horizontal overflow', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/login');
-    await signIn(page, fixture!.user, /\/modelops$/);
+    await signInBrowserUser(page, fixture!.user, /\/dashboard$/);
 
     const trigger = page.getByRole('button', { name: 'Open workspace navigation' });
     await trigger.click();
     const dialog = page.getByRole('dialog', { name: 'Workspace navigation' });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('link', { name: /^Evaluations/ })).toBeFocused();
+    await expect(dialog.getByRole('link', { name: /^Dashboard/ })).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
@@ -269,19 +236,19 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
 
   test('onboards a confirmed user into one initial organization', async ({ page }) => {
     await page.goto('/login?next=%2Fonboarding');
-    await signIn(page, fixture!.onboardingUser, /\/onboarding$/);
+    await signInBrowserUser(page, fixture!.onboardingUser, /\/onboarding$/);
     await page.getByLabel('Workspace name').fill('Browser onboarding workspace');
     await page.getByRole('button', { name: 'Create workspace' }).click();
-    await expect(page).toHaveURL(/\/modelops$/);
-    await expect(page.getByRole('heading', { name: 'Model card generator' })).toBeVisible();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole('heading', { name: 'Organization dashboard' })).toBeVisible();
     await page.reload();
-    await expect(page).toHaveURL(/\/modelops$/);
+    await expect(page).toHaveURL(/\/dashboard$/);
   });
 
   test('accepts an invitation and lets an administrator change and remove the member', async ({ page }) => {
     test.slow();
     await page.goto('/login');
-    await signIn(page, fixture!.user, /\/modelops$/);
+    await signInBrowserUser(page, fixture!.user, /\/dashboard$/);
     await page.goto('/settings/members');
     await expect(page.getByRole('heading', { name: 'Members and invitations' })).toBeVisible();
     expect(await scanSeriousAndCriticalViolations(page)).toEqual([]);
@@ -300,10 +267,10 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     expect(invitation.error, JSON.stringify(invitation.error)).toBeNull();
     const invitationId = invitation.data!.id;
 
-    await signOut(page);
+    await signOutBrowserUser(page);
     await page.goto(`/invite/accept?invitation=${invitationId}`);
     await expect(page).toHaveURL(/\/login\?next=/, { timeout: 30_000 });
-    await signIn(page, fixture!.invitedUser, new RegExp(`/invite/accept\\?invitation=${invitationId}`));
+    await signInBrowserUser(page, fixture!.invitedUser, new RegExp(`/invite/accept\\?invitation=${invitationId}`));
     const acceptanceResponse = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return response.request().method() === 'POST'
@@ -311,7 +278,7 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     });
     await page.getByRole('button', { name: 'Accept organization invitation' }).click();
     expect((await acceptanceResponse).status(), 'Invitation acceptance must succeed').toBe(200);
-    await expect(page).toHaveURL(/\/modelops$/, { timeout: 30_000 });
+    await expect(page).toHaveURL(/\/dashboard$/, { timeout: 30_000 });
     await expect(page.getByRole('navigation', { name: 'Workspace navigation' }).getByRole('link', { name: /^Team/ })).toHaveCount(0);
 
     await page.goto('/settings/members');
@@ -320,8 +287,8 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
     expect(forbiddenApiStatus).toBe(403);
 
     await page.goto('/modelops');
-    await signOut(page);
-    await signIn(page, fixture!.user, /\/modelops$/);
+    await signOutBrowserUser(page);
+    await signInBrowserUser(page, fixture!.user, /\/dashboard$/);
     await page.goto('/settings/members');
     const memberRow = page.getByRole('row').filter({ hasText: fixture!.invitedUser.email });
     await expect(memberRow).toBeVisible();
@@ -352,7 +319,7 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
   test('switches organizations without retaining records or navigation from the previous tenant', async ({ page }) => {
     test.slow();
     await page.goto('/login');
-    await signIn(page, fixture!.user, /\/modelops$/);
+    await signInBrowserUser(page, fixture!.user, /\/dashboard$/);
 
     const markerName = `Tenant boundary marker ${crypto.randomUUID()}`;
     const created = await page.request.post('/api/modelops', {
@@ -398,8 +365,8 @@ browserDescribe('ModelOps browser workflow (requires the disposable Supabase run
       expect((await switchResponse).status()).toBe(200);
       await switchedDocument;
       await expect(page.locator('header').getByLabel('Active organization')).toHaveValue(secondOrganizationId);
-      await expect(page).toHaveURL(/\/evaluations$/);
-      await expect(page.getByText('No matching evaluations')).toBeVisible();
+      await expect(page).toHaveURL(/\/dashboard$/);
+      await expect(page.getByText('No active evaluations yet. Authorized members can create the first governed dossier.')).toBeVisible();
       await expect(page.getByText(markerName, { exact: true })).toHaveCount(0);
       await expect(page.getByRole('navigation', { name: 'Workspace navigation' }).getByRole('link', { name: /^Team/ })).toHaveCount(0);
       await expect(page.getByRole('link', { name: 'New evaluation' })).toHaveCount(0);

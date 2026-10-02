@@ -3,6 +3,19 @@ import { compare_runs } from '../../src/lib/modelops/tools';
 import sampleExperiments from '../fixtures/modelops/sample-experiments.json';
 
 describe('compare_runs', () => {
+  it('uses recorded scores rather than recalculating a different rubric', () => {
+    const first = { model_name: 'A', version: '1', dataset: 'D', readiness_score: 25, rubric_version: '2026-09-03.2', reproducibility: 'Not supplied.' };
+    const result = compare_runs(first, { ...first, version: '2', readiness_score: 50 });
+    expect(result.readiness_score_1).toBe(25);
+    expect(result.readiness_score_2).toBe(50);
+    expect(result.readiness_delta).toBe(25);
+  });
+
+  it('does not imply readiness improvement across different historical rubrics', () => {
+    const result = compare_runs({ readiness_score: 100, rubric_version: 'legacy' }, { readiness_score: 25, rubric_version: '2026-09-03.2' });
+    expect(result.readiness_delta).toBeNull();
+    expect(result.summary[0]).toContain('different rubrics');
+  });
   it('should correctly compare two experiment runs', () => {
     const run1 = {
       model_name: 'Classifier-A',

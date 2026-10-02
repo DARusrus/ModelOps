@@ -72,4 +72,44 @@ describe('GET /api/modelops/[id] saved evaluation detail', () => {
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ success: false, error: 'Saved evaluation was not found' });
   });
+
+  it('rejects an invalid route identifier before authentication or storage access', async () => {
+    const response = await GET(
+      new Request('https://example.test/api/modelops/not-a-uuid'),
+      { params: Promise.resolve({ id: 'not-a-uuid' }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      success: false,
+      code: 'VALIDATION_FAILED',
+      error: 'Saved evaluation ID is invalid',
+    });
+    expect(mocks.requireActor).not.toHaveBeenCalled();
+    expect(mocks.serverClient).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when persisted card data violates the storage contract', async () => {
+    const query = queryReturning([{
+      id: evaluationId,
+      payload: { model_name: 'Incomplete persisted model', version: '1.0.0' },
+      workflow_state: 'submitted',
+      created_at: timestamp,
+      expires_at: '2027-09-11T00:00:00.000+00:00',
+    }]);
+    mocks.from.mockReturnValue(query);
+    mocks.serverClient.mockResolvedValue({ from: mocks.from });
+
+    const response = await GET(
+      new Request(`https://example.test/api/modelops/${evaluationId}`),
+      { params: Promise.resolve({ id: evaluationId }) },
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      success: false,
+      code: 'INTERNAL_ERROR',
+      error: 'Saved evaluation could not be loaded',
+    });
+  });
 });

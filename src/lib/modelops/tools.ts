@@ -5,13 +5,14 @@ import {
   ToolRuleViolation,
 } from '@/types';
 import { metricDirection } from '@/domain/modelops/metric-registry';
-import { EvidenceItem } from '@/domain/modelops/evidence';
+import { EvidenceItem, EvidenceItemSchema, RUBRIC_VERSION, scoreEvidence } from '@/domain/modelops/evidence';
 
 type EvaluationRecord = Record<string, unknown> & {
   model_name?: string; version?: string; dataset?: string; metrics?: Record<string, number>;
   input_shape?: string; data_types?: string[]; limitations?: string[] | string; risks?: string[] | string;
   warnings?: string[] | string; tests?: string[] | string; reproducibility?: string; intended_use?: string;
   evidence_items?: EvidenceItem[];
+  readiness_score?: number; rubric_version?: string;
 };
 
 function asEvaluationRecord(value: unknown): EvaluationRecord {
@@ -19,7 +20,7 @@ function asEvaluationRecord(value: unknown): EvaluationRecord {
 }
 
 /**
- * Calculates a deterministic model readiness score (0-100) based on documentation completeness.
+ * Evidence rubric for current cards; legacy completeness rubric for historical fixtures.
  */
 export function readiness_score(data: unknown): number {
   return readiness_score_detail(data).score;
@@ -52,6 +53,9 @@ export function readiness_score_detail(data: unknown): ReadinessScoreResult {
   }
 
   const record = asEvaluationRecord(data);
+  if (record.rubric_version === RUBRIC_VERSION) {
+    return scoreEvidence(EvidenceItemSchema.array().parse(record.evidence_items || []));
+  }
   const justifications: ReadinessScoreResult['justification'] = [];
   const breakdown: Record<string, number> = {};
 
@@ -147,6 +151,8 @@ export function readiness_score_detail(data: unknown): ReadinessScoreResult {
     'default',
     'none',
     'n/a',
+    'Not supplied.',
+    'Not specified',
   ];
   const hasReproducibility = Boolean(
     record.reproducibility && typeof record.reproducibility === 'string' && record.reproducibility.trim().length > 0 && !reproducibilityDefaults.includes(record.reproducibility.trim())
@@ -158,7 +164,7 @@ export function readiness_score_detail(data: unknown): ReadinessScoreResult {
     points: testPoints,
     max_points: 25,
     passed: testPoints >= 15,
-    reason: `Executed ${testsCount} test suites. Reproducibility documented: ${hasReproducibility ? 'Yes' : 'No'}.`,
+    reason: `Declared ${testsCount} test suites; execution is not verified. Reproducibility documented: ${hasReproducibility ? 'Yes' : 'No'}.`,
   });
 
   const totalScore = Math.min(100, Math.max(0, idPoints + datasetPoints + metricsPoints + govPoints + testPoints));
@@ -236,12 +242,20 @@ export function compare_runs(
     };
   });
 
-  const score1 = readiness_score(run1);
-  const score2 = readiness_score(run2);
-  const readinessDelta = score2 - score1;
+  // Saved cards retain their historical rubric and score; never silently rescore an attested record.
+  const recordedScore = (record: EvaluationRecord) => typeof record.readiness_score === 'number'
+    && Number.isFinite(record.readiness_score) && record.readiness_score >= 0 && record.readiness_score <= 100
+    ? record.readiness_score : readiness_score(record);
+  const score1 = recordedScore(firstRun);
+  const score2 = recordedScore(secondRun);
+  const rubric1 = firstRun.rubric_version || 'legacy';
+  const rubric2 = secondRun.rubric_version || 'legacy';
+  const readinessDelta = rubric1 === rubric2 ? score2 - score1 : null;
 
   const summary: string[] = [];
-  if (readinessDelta > 0) {
+  if (readinessDelta === null) {
+    summary.push(`Readiness scores use different rubrics (${rubric1} vs ${rubric2}); no readiness improvement is inferred.`);
+  } else if (readinessDelta > 0) {
     summary.push(`${name2} (v${ver2}) has a higher readiness score (+${readinessDelta} points) than ${name1} (v${ver1}).`);
   } else if (readinessDelta < 0) {
     summary.push(`${name1} (v${ver1}) has a higher readiness score (+${Math.abs(readinessDelta)} points) than ${name2} (v${ver2}).`);
@@ -268,6 +282,8 @@ export function compare_runs(
     readiness_score_1: score1,
     readiness_score_2: score2,
     readiness_delta: readinessDelta,
+    rubric_version_1: rubric1,
+    rubric_version_2: rubric2,
     summary,
   };
 }

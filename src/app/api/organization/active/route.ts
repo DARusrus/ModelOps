@@ -4,12 +4,13 @@ import { createErrorResponse, createSuccessResponse } from '@/lib/modelops/valid
 import { ActiveOrganizationResponseSchema, ActiveOrganizationsResponseSchema, OrganizationSelectionRequestSchema } from '@/domain/modelops/api-contracts';
 import { readJsonRequest, withRequestId } from '@/lib/http';
 import { ACTIVE_ORGANIZATION_COOKIE, activeOrganizationCookieOptions } from '@/lib/auth/active-organization';
+import { getVerifiedUser } from '@/lib/supabase/verified-user';
 
 const SelectionSchema = OrganizationSelectionRequestSchema;
 
 async function authenticatedMemberships() {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getVerifiedUser(supabase);
   if (!user) throw new Error('UNAUTHENTICATED');
   const { data: memberships, error } = await supabase.from('memberships').select('organization_id, role').eq('user_id', user.id).order('created_at');
   if (error) throw new Error('MEMBERSHIPS_UNAVAILABLE');

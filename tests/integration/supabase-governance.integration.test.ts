@@ -430,6 +430,154 @@ describe.skipIf(!enabled)('Supabase governance integration', () => {
     expect(secondPage.data?.[0].model_name).toBe('Page C');
   });
 
+  it('returns exact bounded dashboard aggregates without exposing raw audit payloads', async () => {
+    const owner = await signedInClient(fixture.userA);
+    const direct = await owner.rpc('get_dashboard_snapshot_as', {
+      requesting_actor: fixture.userA.id,
+      target_organization: fixture.organizationAId,
+      recent_limit: 5,
+    });
+    expect(direct.error?.code).toBe('42501');
+
+    const activeRows = await fixture.admin.from('model_cards')
+      .select('workflow_state')
+      .eq('organization_id', fixture.organizationAId)
+      .gt('expires_at', new Date().toISOString());
+    expect(activeRows.error).toBeNull();
+    const expectedCounts = {
+      draft: 0, submitted: 0, under_review: 0, approved: 0, rejected: 0, changes_requested: 0,
+    };
+    for (const row of activeRows.data ?? []) expectedCounts[row.workflow_state as keyof typeof expectedCounts] += 1;
+
+    const snapshot = await fixture.admin.rpc('get_dashboard_snapshot_as', {
+      requesting_actor: fixture.userA.id,
+      target_organization: fixture.organizationAId,
+      recent_limit: 5,
+    });
+    expect(snapshot.error).toBeNull();
+    expect(snapshot.data).toMatchObject({
+      active_evaluations: activeRows.data?.length ?? 0,
+      review_required: expectedCounts.submitted + expectedCounts.under_review,
+      workflow_counts: expectedCounts,
+    });
+    expect(snapshot.data.recent_evaluations.length).toBeLessThanOrEqual(5);
+    expect(snapshot.data.recent_activity.length).toBeLessThanOrEqual(5);
+    const serializedActivity = JSON.stringify(snapshot.data.recent_activity);
+    expect(serializedActivity).not.toContain('payload');
+    expect(serializedActivity).not.toContain('reason');
+    expect(serializedActivity).not.toContain('digest');
+    expect(serializedActivity).not.toContain('evidence');
+
+    const emptyOrganizationId = crypto.randomUUID();
+    try {
+      const emptyOrganization = await fixture.admin.from('organizations').insert({
+        id: emptyOrganizationId,
+        name: 'Empty dashboard integration organization',
+        created_by: fixture.userA.id,
+      });
+      expect(emptyOrganization.error).toBeNull();
+      const emptyMembership = await fixture.admin.from('memberships').insert({
+        organization_id: emptyOrganizationId,
+        user_id: fixture.userA.id,
+        role: 'admin',
+      });
+      expect(emptyMembership.error).toBeNull();
+      const emptySnapshot = await fixture.admin.rpc('get_dashboard_snapshot_as', {
+        requesting_actor: fixture.userA.id,
+        target_organization: emptyOrganizationId,
+        recent_limit: 5,
+      });
+      expect(emptySnapshot.error).toBeNull();
+      expect(emptySnapshot.data).toEqual({
+        active_evaluations: 0,
+        review_required: 0,
+        workflow_counts: { draft: 0, submitted: 0, under_review: 0, approved: 0, rejected: 0, changes_requested: 0 },
+        recent_evaluations: [],
+        recent_activity: [],
+      });
+    } finally {
+      await fixture.admin.from('organizations').delete().eq('id', emptyOrganizationId);
+    }
+  });
+
+  it('enforces the reviewer queue boundary, author projection, and stable pagination', async () => {
+    const owner = await signedInClient(fixture.userA);
+    const cardIds = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+    const createdAt = Date.now() + 120_000;
+    const queueCards = await fixture.admin.from('model_cards').insert(cardIds.map((id, index) => ({
+      id,
+      organization_id: fixture.organizationAId,
+      created_by: fixture.userA.id,
+      payload: { model_name: `Queue ${index + 1}`, version: '1.0.0', evidence_items: [] },
+      readiness_score: 60 + index,
+      rubric_version: 'integration',
+      workflow_state: index === 2 ? 'draft' : index === 1 ? 'under_review' : 'submitted',
+      created_at: new Date(createdAt - index * 1_000).toISOString(),
+    })));
+    expect(queueCards.error).toBeNull();
+
+    try {
+      const clientDenied = await owner.rpc('list_review_queue_as', {
+        requesting_actor: fixture.userA.id,
+        target_organization: fixture.organizationAId,
+        requested_state: null,
+        requested_limit: 21,
+        cursor_created_at: null,
+        cursor_id: null,
+      });
+      expect(clientDenied.error?.code).toBe('42501');
+
+      const crossTenant = await fixture.admin.rpc('list_review_queue_as', {
+        requesting_actor: fixture.userB.id,
+        target_organization: fixture.organizationAId,
+        requested_state: null,
+        requested_limit: 21,
+        cursor_created_at: null,
+        cursor_id: null,
+      });
+      expect(crossTenant.error?.message).toBe('FORBIDDEN');
+
+      const firstPage = await fixture.admin.rpc('list_review_queue_as', {
+        requesting_actor: fixture.userA.id,
+        target_organization: fixture.organizationAId,
+        requested_state: null,
+        requested_limit: 1,
+        cursor_created_at: null,
+        cursor_id: null,
+      });
+      expect(firstPage.error).toBeNull();
+      expect(firstPage.data).toHaveLength(1);
+      expect(firstPage.data?.[0]).toMatchObject({ id: cardIds[0], author_email: fixture.userA.email, workflow_state: 'submitted' });
+      expect(firstPage.data?.[0]).not.toHaveProperty('payload');
+
+      const secondPage = await fixture.admin.rpc('list_review_queue_as', {
+        requesting_actor: fixture.userA.id,
+        target_organization: fixture.organizationAId,
+        requested_state: null,
+        requested_limit: 2,
+        cursor_created_at: firstPage.data![0].created_at,
+        cursor_id: firstPage.data![0].id,
+      });
+      expect(secondPage.error).toBeNull();
+      expect(secondPage.data?.[0]).toMatchObject({ id: cardIds[1], workflow_state: 'under_review' });
+      expect(secondPage.data?.some((row: { id: string }) => row.id === cardIds[0])).toBe(false);
+      expect(secondPage.data?.some((row: { id: string }) => row.id === cardIds[2])).toBe(false);
+
+      const submittedOnly = await fixture.admin.rpc('list_review_queue_as', {
+        requesting_actor: fixture.userA.id,
+        target_organization: fixture.organizationAId,
+        requested_state: 'submitted',
+        requested_limit: 21,
+        cursor_created_at: null,
+        cursor_id: null,
+      });
+      expect(submittedOnly.error).toBeNull();
+      expect(submittedOnly.data?.every((row: { workflow_state: string }) => row.workflow_state === 'submitted')).toBe(true);
+    } finally {
+      await fixture.admin.from('model_cards').delete().in('id', cardIds);
+    }
+  });
+
   it('shares provider circuit state through the database and recovers after success', async () => {
     const initiallyAvailable = await fixture.admin.rpc('provider_circuit_available', { target_provider: 'groq' });
     expect(initiallyAvailable.error).toBeNull();

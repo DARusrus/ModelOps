@@ -1,258 +1,55 @@
-# ModelOps — System Architecture
+# ModelOps — current architecture
 
-> **Owner:** Ahmed Amir Rusrus — Integration Lead / Solution Architect
-> **Last updated:** Session 1
-> **Status:** Active — agreed by all members before Session 2 gate
+Reviewed against source on 2026-10-02. This document supersedes Session 1 architecture claims; it does not assert that the latest working tree is deployed.
 
----
+## 1. Request and evidence flow
 
-## 1. What This System Does
+Browser intake → Next route validation/authentication → shared request budget and idempotency claim → evidence-card builder → optional approved-guidance selection → deterministic evidence scoring → atomic database persistence → saved detail URL.
 
-ModelOps is a lightweight ML governance workspace. A user submits experiment metadata (dataset, model, metrics) and the system:
+A later human action goes through its own authenticated review API and atomic database function. That function changes workflow state and appends an ordered, digest-linked review record. It does not regenerate or edit model evidence. Comparison reloads both saved IDs under the active organization.
 
-1. Validates the input server-side before any AI is called
-2. Uses AI to draft a model card strictly from the submitted evidence
-3. Runs a deterministic readiness check to find gaps and assign a score
-4. Compares multiple runs side-by-side with deterministic metric diffs
-5. Returns a structured result for human review — never auto-approved
+## 2. Boundaries and files
 
-**Non-negotiable rule:** The AI writes *from evidence only*. If evidence is missing, the gap is flagged. Nothing is invented.
+| Layer | Files | Responsibility / consumer |
+|---|---|---|
+| App Router | `src/app/(workspace)/`, `src/proxy.ts`, `src/lib/auth/workspace-context.ts` | Server route gates, verified session, selected organization; route groups do not add URL segments |
+| Authentication | `src/lib/auth/actor.ts`, `permissions.ts`, `continuation.ts`; `src/lib/supabase/verified-user.ts` | Verify session, load real membership, check capability, allow only safe local continuations |
+| Presentation | `components/app-shell/`, `components/modelops/`, `dashboard/`, `reviews/` | URL-based pages, loading/error states; no privileged client import |
+| Contracts | `src/domain/modelops/`, `domain/dashboard/`, `domain/reviews/` | Zod input, stored-data and output contracts |
+| Evaluation | `src/lib/modelops/card.ts`, `service.ts`, `tools.ts` | Preserve submitted facts, official evidence score, deterministic saved-record comparison |
+| Optional AI | `src/lib/ai/`, `src/lib/corpus/guidance.ts` | Select eligible catalogue IDs; strict parser renders approved text, not arbitrary generated facts |
+| Persistence | `src/lib/supabase/`, `idempotency.ts`, `supabase/migrations/` | RLS, server-only RPC grants, tenant-bound atomic writes, retention |
+| Reliability | `src/lib/network/timeout.ts`, `src/lib/ai/circuit-breaker.ts`, `provider-concurrency.ts` | Body-aware deadlines, shared circuit state and leased provider concurrency |
+| Observability | `src/lib/observability/`, Sentry instrumentation, `logger.ts` | Correlation IDs and redacted structured diagnostics; not evidence of operational uptime |
 
----
+## 3. Routes and roles
 
-## 2. Production Data Flow
+Public authentication routes and onboarding/invitation continuations are distinct from the protected workspace. `/dashboard` and catalog/detail require read access. Creation/comparison require evaluate/compare capabilities; `/reviews` requires review; member administration requires admin. `src/lib/auth/permissions.ts` is the capability map. APIs independently repeat authentication/authorization. Active-organization cookies are selectors, not proof of membership.
 
-```mermaid
-graph TD
-    A([User — Browser]) -->|Fills experiment form| B[InputForm]
-    B -->|POST /api/modelops| C[Route Handler]
-    C -->|Zod schema check| D{Valid?}
-    D -- No --> E[400 Safe Error → ErrorState UI]
-    D -- Yes --> F[AI Provider Layer]
+Viewer: read. Editor: read/evaluate/compare. Reviewer: those plus review. Admin: those plus administration. Self-attestation and independent-review modes are explicit organization policies, not hidden AI decisions.
 
-    F -->|Primary| G[Groq — llama-3.3-70b-versatile]
-    F -->|Fallback + structured output| H[Gemini — gemini-1.5-flash]
-    G -->|Fails| H
-    G & H -->|Both fail| I2[Deterministic Offline Fallback]
+## 4. Evidence, score and AI
 
-    G & H --> I[Model Card Draft]
-    I2 --> I
+`EvidenceItemSchema` validates shape, required result/date/reference and provenance fields. Public intake is always submitted evidence, even if a caller labels it verified. The current rubric is `2026-09-03.2`; it measures evidence coverage, not truth, safety, fairness or quality.
 
-    I --> J[readiness_score — deterministic, pure function]
-    I --> K[compare_runs — deterministic, pure function]
+AI egress is disabled by default. When permitted, provider preference/fallback, model and credentials are server-owned. Current defaults are read from `env.ts`/`.env.example`, not fixed by this document. Provider response is exactly `{"guidance_ids":[...]}`. Selection is checked against eligible entries and the approved source register. Source text is local and versioned. No vector database, retrieval service, agentic tool execution or invented experiment analysis was added.
 
-    J --> L[Typed ModelCardOutput]
-    K --> L
+`deterministic_only`, `provider_unavailable` and `ai_suggestion_available` have different meanings. Invalid provider output is unavailable, and the API releases its reserved AI quota. Identity, metrics, score and generated `pending_human_review` decision stay server-owned.
 
-    L -->|JSON response| B
-    B --> M[ResultView + EvidencePanel + RunComparison]
-    M --> A
-```
+## 5. Persistence and immutability
 
----
+Saved evidence payloads are immutable through the application API. The editor means editable intake before saving; correction requires a new evaluation. Review state/history remain mutable only through authorized workflow actions. Expiration hides records; a separately installed scheduled retention function physically removes eligible data. No new migration is required by the handbook corrections.
 
-## 3. Module Ownership
+Cards/evidence use one-year retention and audit history seven years under the approved project policy. Infrastructure backups and copies need their own retention controls; application expiry does not erase external backups.
 
-| Module | Owner | Boundary |
-|--------|-------|----------|
-| Architecture, contracts, integration, deployment | **Ahmed Amir Rusrus** | Everything that connects the parts. Reviews all PRs before merge. |
-| API route, validation, AI providers, schema, service | **Moamen Elkholy** | Server-side only. No secret reaches the client. |
-| UI pages, form, result render, all UI states | **Mohamed Said Mohamed Barakat** | Works against real API contract — not mocks-only in critical path. |
-| Deterministic tools, knowledge corpus, eval cases | **Zein ElDin Mohamed Farouk** | `readiness_score()` and `compare_runs()` are pure functions — no AI logic inside them. |
+## 6. Pagination and asynchronous UI
 
-**Dependency order:** Zein → Moamen → Mohamed → Ahmed → Production
+Catalog/review pages use bounded keyset pagination with a timestamp/UUID tie-breaker. Validated PostgreSQL timestamp precision is preserved, not rounded through JavaScript Date. Review filter comes from the URL prop. Aborted initial/pagination responses cannot overwrite another filter; active-filter clicks are no-ops and failures provide retry.
 
-**Rule:** Any change to a module's public interface (API shape, tool signature, schema field) requires a PR reviewed by Ahmed before it is merged to `dev`.
+Managed Supabase fetch buffers bounded JSON bodies (5 MiB maximum) within its deadline. It is not a general streaming/SSE adapter. Provider deadlines remain active while reading their response body. Abort is a client/network bound, not a promise that a submitted database transaction rolled back; idempotency handles ambiguous write outcomes.
 
----
+## 7. Scale and security limits
 
-## 4. Actual File Structure
+Stateless application instances share database-backed request/quota/circuit/concurrency controls. Small projections and indexes reduce unnecessary transfer. This is a sensible small-team architecture, not proof of unlimited traffic capacity or DDoS immunity. Vercel WAF, Supabase Auth limits, hosting/database capacity and regional latency require operational configuration and measurement. Health probes alone do not load-test authenticated mutations.
 
-```
-ModelOps-main/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx                        # Root redirect to /modelops
-│   │   ├── layout.tsx                      # App shell
-│   │   ├── globals.css
-│   │   ├── modelops/
-│   │   │   └── page.tsx                    # Main workflow page [Mohamed]
-│   │   └── api/
-│   │       └── modelops/
-│   │           ├── route.ts                # POST /api/modelops [Moamen]
-│   │           └── compare/
-│   │               └── route.ts            # POST /api/modelops/compare [Moamen + Zein]
-│   ├── components/
-│   │   ├── modelops/
-│   │   │   ├── InputForm.tsx               # Experiment intake form [Mohamed]
-│   │   │   ├── ResultView.tsx              # Model card render [Mohamed]
-│   │   │   ├── EvidencePanel.tsx           # Gaps + sources display [Mohamed]
-│   │   │   └── RunComparison.tsx           # Side-by-side run diff [Mohamed]
-│   │   └── common/
-│   │       ├── LoadingState.tsx            # [Mohamed]
-│   │       └── ErrorState.tsx              # [Mohamed]
-│   ├── lib/
-│   │   ├── ai/
-│   │   │   ├── groq.ts                     # Primary provider [Moamen]
-│   │   │   ├── gemini.ts                   # Fallback + structured output [Moamen]
-│   │   │   ├── prompts.ts                  # Prompt builder — anti-hallucination rules [Moamen]
-│   │   │   ├── providers.ts                # Fallback orchestration [Moamen]
-│   │   │   └── validators.ts               # AI response parser + Zod enforcement [Moamen]
-│   │   ├── modelops/
-│   │   │   ├── schema.ts                   # ModelCardOutput Zod schema [Moamen]
-│   │   │   ├── service.ts                  # Request orchestrator + LRU cache [Moamen]
-│   │   │   ├── validators.ts               # ExperimentMetadata input schema [Moamen]
-│   │   │   ├── tools.ts                    # readiness_score() + compare_runs() [Zein]
-│   │   │   ├── tool-rules.ts               # Scoring rules documentation [Zein]
-│   │   │   ├── taxonomy.ts                 # Domain taxonomy [Zein]
-│   │   │   └── lru.ts                      # LRU cache utility [Moamen]
-│   │   ├── corpus/                         # Approved knowledge sources [Zein]
-│   │   ├── env.ts                          # Server env var validation
-│   │   ├── errors.ts                       # Error types
-│   │   ├── logger.ts                       # Server-side logger (no secrets)
-│   │   └── rate-limit.ts                   # Request rate limiting
-│   └── types/
-│       └── index.ts                        # Shared TypeScript interfaces [All]
-├── tests/
-│   ├── api/
-│   │   ├── modelops.test.ts                # POST /api/modelops tests [Moamen]
-│   │   └── compare.test.ts                 # POST /api/modelops/compare tests [Moamen + Zein]
-│   ├── tools/                              # readiness_score() + compare_runs() tests [Zein]
-│   ├── e2e/                                # Full journey tests [Ahmed]
-│   ├── evaluation/                         # 10-case evaluation matrix [Zein]
-│   └── fixtures/                           # Sample experiment records [Zein]
-├── docs/
-│   ├── architecture.md                     # This file [Ahmed]
-│   ├── api-contracts.md                    # Route specs + schemas [Ahmed]
-│   ├── release-checklist.md                # Production gate [Ahmed]
-│   ├── ai-usage.md                         # AI usage log [All members]
-│   ├── source-register.md                  # Approved trusted sources [Zein]
-│   ├── model-card-template.md              # Required model card structure [Zein]
-│   ├── readiness-checklist.md              # Human-readable scoring rubric [Zein]
-│   └── known-gaps-and-limitations.md       # Known quality findings [Zein]
-├── .github/
-│   ├── pull_request_template.md            # [Ahmed]
-│   └── ISSUE_TEMPLATE/                     # Per-role issue templates [Ahmed]
-├── .env.example                            # Variable names only — no values [Ahmed]
-├── vercel.json                             # Vercel configuration
-├── next.config.ts
-├── package.json
-└── README.md                               # [Ahmed]
-```
-
----
-
-## 5. API Surface
-
-| Route | Method | Owner | Description |
-|-------|--------|-------|-------------|
-| `/api/modelops` | POST | Moamen | Validate input → AI draft → `readiness_score()` → return `ModelCardOutput` |
-| `/api/modelops/compare` | POST | Moamen + Zein | Validate two runs → `compare_runs()` → return deterministic diff |
-
-Full request/response shapes with examples live in `docs/api-contracts.md`.
-
----
-
-## 6. Shared Output Schema
-
-Every AI response **must** conform to `ModelCardOutput` (defined in `src/lib/modelops/schema.ts`).
-`readiness_score` and `decision` are **never** set by the AI.
-
-```typescript
-// src/lib/modelops/schema.ts — source of truth
-interface ModelCardOutput {
-  model_name:           string       // from submitted evidence
-  version:              string       // from submitted evidence
-  dataset:              string       // from submitted evidence
-  experiment_info:      string       // AI-drafted from evidence
-  input_shape:          string       // from submitted evidence or "Not specified"
-  data_types:           string[]     // from submitted evidence
-  distribution_summary: string       // AI-drafted from evidence
-  metrics:              Record<string, number>  // from submitted evidence only
-  intended_use:         string       // from submitted evidence
-  warnings:             string[]     // AI-identified from evidence
-  limitations:          string[]     // from submitted evidence + AI gaps
-  risks:                string[]     // from submitted evidence + AI gaps
-  tests:                string[]     // from submitted evidence
-  reproducibility:      string       // from submitted evidence
-  ai_analysis:          string       // AI-drafted narrative — evidence only
-  detected_issues:      string[]     // AI-identified from evidence
-  error_reasons:        string[]     // validation failures
-  suggested_fixes:      string[]     // AI-suggested from evidence
-  next_steps:           string[]     // AI-suggested from evidence
-  references:           string[]     // must appear in docs/source-register.md
-  evidence:             string[]     // submitted facts used to justify claims
-  readiness_score:      number       // set by readiness_score() — NEVER by AI
-  decision:             string       // set after human review — NEVER auto-approved
-}
-```
-
----
-
-## 7. Provider Strategy
-
-| Priority | Provider | Model | Role |
-|----------|----------|-------|------|
-| 1 | **Groq** | `llama-3.3-70b-versatile` | Primary — fast text generation, 30s timeout |
-| 2 | **Gemini** | `gemini-1.5-flash` | Fallback — structured JSON output guaranteed |
-| 3 | **Offline** | *(none)* | Deterministic card grounded in metadata only |
-
-If both providers fail → service synthesizes a deterministic card from submitted metadata. Safe error response goes to client. Provider error details stay server-side only.
-
----
-
-## 8. Security Rules — Non-Negotiable
-
-| Rule | Enforcement |
-|------|-------------|
-| `GROQ_API_KEY` and `GEMINI_API_KEY` are server-side only | Validated in `src/lib/env.ts` |
-| No secret touches any `src/app/` or component file | ESLint + code review |
-| All input is Zod-validated before any provider is called | `src/lib/modelops/validators.ts` |
-| Tool arguments validated before execution | `src/app/api/modelops/compare/route.ts` |
-| `.env.example` has variable names only — no values | Committed to repo |
-| `.env.local` is git-ignored — never committed | `.gitignore` enforces this |
-| Server logs omit secrets and raw tokens | `src/lib/logger.ts` |
-| Rate limiting on all API routes | `src/lib/rate-limit.ts` |
-
----
-
-## 9. Environment Variables
-
-Documented in `.env.example`. Set in Vercel dashboard for production — never in the repository.
-
-| Variable | Used by | Side |
-|----------|---------|------|
-| `GROQ_API_KEY` | `src/lib/ai/groq.ts` | Server only |
-| `GEMINI_API_KEY` | `src/lib/ai/gemini.ts` | Server only |
-| `NEXT_PUBLIC_APP_URL` | Build-time config | Public (no secret) |
-
----
-
-## 10. Session Gate Checkpoints
-
-| Session | Architecture milestone |
-|---------|----------------------|
-| **1** | This document agreed by all members; repo + branch rules active |
-| **2** | `docs/api-contracts.md` frozen — no contract changes without Ahmed sign-off |
-| **3** | All modules running on `dev` end-to-end; no mocks in critical request path |
-| **4** | Production build clean on Vercel; env vars set in dashboard; rollback documented |
-| **5** | Every member can explain their module boundary from this document individually |
-
----
-
-## 11. Extension Points
-
-Future additions slot in without rewiring existing modules:
-
-| Future feature | Where it slots in |
-|----------------|-------------------|
-| Persist experiment runs | Add `lib/storage/` — Moamen owns the interface |
-| More AI providers (OpenAI, etc.) | New file under `lib/ai/` — no other files change |
-| Export model card as PDF | New component under `components/modelops/` — Mohamed owns |
-| More deterministic tools | New file under `lib/modelops/` — Zein owns |
-| Auth / user accounts | Middleware at `src/middleware.ts` — Ahmed owns |
-| CI/CD status checks | `.github/workflows/` — Ahmed enables in Session 4 |
-
----
-
-*This document is the source of truth for module boundaries. Any change to a module's public interface requires a PR reviewed by Ahmed Amir Rusrus before it is merged.*
+Current contracts: [API](api-contracts.md). Actual tests and remaining release gates: [verification](handbook-closure-results.md), [release checklist](release-checklist.md).

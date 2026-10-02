@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ArrowRight, ChevronDown, Loader2, SearchX } from 'lucide-react';
@@ -22,67 +22,83 @@ export default function EvaluationCatalog() {
   const role = useWorkspaceRole();
   const searchParams = useSearchParams();
   const filterKey = searchParams.toString();
-  const [evaluations, setEvaluations] = useState<EvaluationSummary[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadedFilterKey, setLoadedFilterKey] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState('');
-  const loading = loadedFilterKey !== filterKey;
+  const [retry, setRetry] = useState(0);
+  const requestKey = `${filterKey}:${retry}`;
+  const [result, setResult] = useState<{ key: string; signal: AbortSignal; body: EvaluationListResponse | null; error: string } | null>(null);
+  const [page, setPage] = useState<{ signal: AbortSignal; pending: boolean; error: string } | null>(null);
+  const activePage = useRef<AbortController | null>(null);
+  const current = result?.key === requestKey && !result.signal.aborted ? result : null;
+  const loading = !current;
+  const evaluations = current?.body?.evaluations ?? [];
+  const nextCursor = current?.body?.next_cursor;
+  const hasMore = current?.body?.has_more ?? false;
+  const currentPage = page && !page.signal.aborted ? page : null;
+  const loadingMore = currentPage?.pending ?? false;
+  const error = current?.error || currentPage?.error;
 
   useEffect(() => {
     const controller = new AbortController();
+    activePage.current?.abort();
     const query = new URLSearchParams(filterKey);
     query.set('limit', '20');
     query.delete('cursor');
     requestJson<EvaluationListResponse>(`/api/modelops?${query.toString()}`, { cache: 'no-store', signal: controller.signal })
       .then((body) => {
-        setError('');
-        setEvaluations(body.evaluations);
-        setNextCursor(body.next_cursor);
-        setHasMore(body.has_more);
-        setLoadedFilterKey(filterKey);
+        if (!controller.signal.aborted) setResult({ key: requestKey, signal: controller.signal, body, error: '' });
       })
       .catch((cause) => {
-        if (!isAbortError(cause)) {
-          setError(errorMessage(cause));
-          setLoadedFilterKey(filterKey);
+        if (!controller.signal.aborted && !isAbortError(cause)) {
+          setResult({ key: requestKey, signal: controller.signal, body: null, error: errorMessage(cause) });
         }
       });
-    return () => controller.abort();
-  }, [filterKey]);
+    return () => {
+      controller.abort();
+      activePage.current?.abort();
+    };
+  }, [filterKey, requestKey]);
 
   async function loadMore() {
-    if (!nextCursor || loadingMore) return;
+    if (!nextCursor || loading || loadingMore || (activePage.current && !activePage.current.signal.aborted)) return;
+    const controller = new AbortController();
+    activePage.current = controller;
     const query = new URLSearchParams(filterKey);
     query.set('limit', '20');
     query.set('cursor', nextCursor);
-    setLoadingMore(true);
-    setError('');
+    setPage({ signal: controller.signal, pending: true, error: '' });
     try {
-      const body = await requestJson<EvaluationListResponse>(`/api/modelops?${query.toString()}`, { cache: 'no-store' });
-      setEvaluations((current) => {
-        const known = new Set(current.map((evaluation) => evaluation.id));
-        return [...current, ...body.evaluations.filter((evaluation) => !known.has(evaluation.id))];
+      const body = await requestJson<EvaluationListResponse>(`/api/modelops?${query.toString()}`, { cache: 'no-store', signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setResult((previous) => {
+        if (!previous?.body || previous.key !== requestKey || previous.signal.aborted) return previous;
+        const known = new Set(previous.body.evaluations.map((evaluation) => evaluation.id));
+        const appended = body.evaluations.filter((evaluation) => {
+          if (known.has(evaluation.id)) return false;
+          known.add(evaluation.id);
+          return true;
+        });
+        return { ...previous, body: { ...body, evaluations: [...previous.body.evaluations, ...appended] } };
       });
-      setNextCursor(body.next_cursor);
-      setHasMore(body.has_more);
     } catch (cause) {
-      setError(errorMessage(cause));
+      if (!controller.signal.aborted && !isAbortError(cause)) {
+        setPage({ signal: controller.signal, pending: true, error: errorMessage(cause) });
+      }
     } finally {
-      setLoadingMore(false);
+      if (!controller.signal.aborted) {
+        setPage((previous) => previous?.signal === controller.signal ? { ...previous, pending: false } : previous);
+      }
+      if (activePage.current === controller) activePage.current = null;
     }
   }
 
   return (
     <div className="space-y-6">
       <EvaluationFilters values={new URLSearchParams(filterKey)} />
-      <section aria-labelledby="evaluation-results-title" aria-busy={loading} className="border border-slate-300 bg-white">
+      <section aria-labelledby="evaluation-results-title" aria-busy={loading || loadingMore} className="border border-slate-300 bg-white">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-300 px-4 py-4 sm:px-5">
           <div>
             <h2 id="evaluation-results-title" className="text-base font-black text-slate-950">Persisted dossiers</h2>
             <p aria-live="polite" className="mt-1 text-xs text-slate-600">
-              {loading ? 'Loading records…' : `${evaluations.length} record${evaluations.length === 1 ? '' : 's'} loaded`}
+              {loading ? 'Loading records…' : current?.error ? 'Records unavailable' : `${evaluations.length} record${evaluations.length === 1 ? '' : 's'} loaded`}
             </p>
           </div>
           {canPerform(role, 'compare') && (
@@ -90,12 +106,17 @@ export default function EvaluationCatalog() {
           )}
         </div>
 
-        {!loading && error && <p role="alert" className="m-4 border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">{error}</p>}
+        {!loading && error && (
+          <div role="alert" className="m-4 border border-rose-300 bg-rose-50 p-4 text-sm text-rose-900">
+            <p>{error}</p>
+            {current?.error && <button type="button" onClick={() => setRetry((value) => value + 1)} className="mt-2 min-h-11 rounded px-3 font-bold underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700">Retry</button>}
+          </div>
+        )}
         {loading ? (
           <div role="status" className="flex min-h-48 items-center justify-center gap-2 p-8 text-sm text-slate-600">
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" /> Loading organization records…
           </div>
-        ) : evaluations.length === 0 ? (
+        ) : current?.error ? null : evaluations.length === 0 ? (
           <div className="flex min-h-56 flex-col items-center justify-center p-8 text-center">
             <SearchX className="h-8 w-8 text-slate-400" aria-hidden="true" />
             <h3 className="mt-3 text-base font-black text-slate-900">No matching evaluations</h3>

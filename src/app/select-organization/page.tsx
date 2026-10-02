@@ -28,7 +28,7 @@ export default function SelectOrganizationPage() {
     setSubmitting(organizationId); setError('');
     try {
       await requestJson('/api/organization/active', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ organization_id: organizationId }) });
-      router.replace('/modelops');
+      router.replace('/dashboard');
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Organization could not be selected.');

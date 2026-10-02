@@ -13,6 +13,11 @@
     "lint": "eslint src tests playwright.config.ts playwright.performance.config.ts",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:evaluation": "vitest run tests/evaluation/handbook.test.ts --reporter=json --outputFile=test-results/handbook-evaluation.json && node scripts/report-handbook-evaluation.mjs",
+    "test:review-queue": "node scripts/validate-review-queue.mjs",
+    "test:browser-auth": "node scripts/validate-browser-auth.mjs",
+    "test:catalog": "node scripts/validate-evaluation-catalog.mjs",
+    "test:production-smoke": "pwsh -NoProfile -File scripts/validate-production-smoke.ps1",
     "test:browser": "playwright test",
     "test:performance": "playwright test --config playwright.performance.config.ts",
     "test:load-smoke": "node scripts/load-smoke.mjs"
@@ -22,7 +27,7 @@
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.114.0",
     "lucide-react": "^1.27.0",
-    "next": "16.3.4",
+    "next": "16.3.8",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "zod": "^3.22.4"
@@ -33,12 +38,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.16",
+    "esbuild": "0.25.12",
     "eslint": "^9.39.1",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "16.3.8",
     "node-fetch": "3.3.2",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",
     "typescript": "^5",
-    "vitest": "^1.6.0"
+    "vite": "6.4.3",
+    "vitest": "4.1.11"
   }
 }

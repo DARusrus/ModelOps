@@ -1,161 +1,62 @@
-# ModelOps — Release Checklist
+# Release checklist — evidence per reviewed commit
 
-> **Owner:** Ahmed Amir Rusrus — Integration Lead / Solution Architect
-> **When to use:** Before every production deployment and before the Session 5 final release.
+Do not pre-check gates from an earlier session. Record commit SHA, deployment ID, environment, timestamp and results. Local working-tree evidence is in [handbook closure results](handbook-closure-results.md); it is not proof of a deployed release.
 
----
+## 1. Local and CI gates
 
-## Pre-Release Gate (Must All Pass Before Deploying)
+- [ ] npm ci from the committed lockfile
+- [ ] npm run lint
+- [ ] npx tsc --noEmit
+- [ ] npm test (record actual passes and intentional live skips)
+- [ ] npm run test:evaluation (ten-case report, not checklist inference)
+- [ ] npm run test:review-queue (Chromium installed; controlled boundary regressions)
+- [ ] npm run test:browser-auth (real Chromium; controlled Supabase auth transport)
+- [ ] npm run test:catalog (real catalog/filter components; cancellation and late-response regressions)
+- [ ] npm run test:production-smoke (PowerShell 7; deterministic route, redirect, JSON/header and timeout contracts)
+- [ ] npm run build
+- [ ] npm audit --omit=dev --audit-level=high; preserve current advisory result
+- [ ] npm audit --audit-level=moderate; require the runtime and development toolchain audit to pass
+- [ ] Review diff, credentials policy and source-map upload configuration
 
-### Code Quality
+Full npm audit also includes development tooling. Do not conceal those findings or fix them with an unreviewed force upgrade.
 
-- [x] `npm run lint` — zero unresolved errors
-- [x] `npx tsc --noEmit` — zero TypeScript errors
-- [x] `npm test` — all tests pass
-- [x] `npm run build` — production build completes without errors
-- [x] No `console.log` left with sensitive data
-- [x] No `any` types added since last review (check with `grep -r ": any" src/`)
+## 2. Disposable environment gates
 
-### Security
+- [ ] Ordered migrations applied to the separate disposable database
+- [ ] Guarded integration runner: RLS, expired records, atomic writes/reviews, RPC grants, invitations, final-admin safety, dashboard/queue
+- [ ] Guarded browser runner: auth, onboarding, catalog/detail, workflow/export/compare, membership, mobile/navigation/tenant isolation, dashboard/reviews
+- [ ] Bounded authenticated performance runner using unchanged explicit budgets
+- [ ] Capture outputs/report for this exact reviewed revision; no skipped suite counted as a pass
 
-- [x] `GROQ_API_KEY` and `GEMINI_API_KEY` are **not** in any client-side file (`src/app/`, components)
-- [x] `.env.local` is in `.gitignore` and has never been committed (`git log -- .env.local` returns nothing)
-- [x] `.env.example` has all variable names with placeholder values only
-- [x] `git log --all --full-history -- "*.env"` — no secrets in git history
-- [x] `npm audit` — no critical or high severity vulnerabilities unaddressed
-- [x] API route validates all input before calling any provider (confirmed in `src/app/api/modelops/route.ts`)
-- [x] Tool arguments (`compare_runs`, `readiness_score`) are validated before execution
+PowerShell runners are under scripts/. They prompt for secrets. Do not run fixture creation/deletion against production.
 
-### Functional Verification
+## 3. Production verification after reviewed merge/deployment
 
-- [x] `POST /api/modelops` — valid payload returns `200` with `ModelCardOutput`
-- [x] `POST /api/modelops` — missing `model_name` returns `400` with field error
-- [x] `POST /api/modelops` — missing/invalid JSON body returns `400`
-- [x] `POST /api/modelops/compare` — valid two-run payload returns `200` with metric diffs
-- [x] `readiness_score` in response is a number computed by the deterministic function — never an AI value
-- [x] `decision` field in response is always `"pending_human_review"` — never auto-approved
-- [x] Rate limiting responds with `429` when the threshold is exceeded
-- [x] Provider fallback: if `GROQ_API_KEY` is invalid, Gemini takes over without a 500
-- [x] Offline fallback: if both providers fail, a deterministic card is returned without an unhandled exception
+- [ ] Matching Supabase public URL/key and server-only secret; latest required migrations
+- [ ] Auth redirect/site URL configured for this deployment
+- [ ] AI egress/provider/data policy confirmed; credentials server-only
+- [ ] Sentry ingest verified and private source-map upload separately verified for the release
+- [ ] Retention cron installed and observed; review database/backups retention
+- [ ] Vercel WAF and Supabase Auth limits checked in the current dashboard
+- [ ] Production smoke passes; unauthorized POST returns 401/UNAUTHENTICATED
+- [ ] Expanded smoke verifies all 28 anonymous readiness/public/protected/API targets; a passing legacy three-route check is insufficient
+- [ ] Vercel deployment's source commit matches the reviewed merged revision; build output alone is not deployment provenance
+- [ ] Sign in and verify saved evaluation → reopen/refresh → human workflow → JSON export → authorized comparison
+- [ ] Exercise dashboard/review filter/back/forward/retry and tenant switching
+- [ ] Controlled load and latency measured within authorized budgets; health probe is not mutation capacity evidence
 
-### UI / UX
+Recorded project domain: https://model-ops.vercel.app. This document does not assert its current deployed revision or health.
 
-- [ ] Main workflow completes on desktop (form submit → result render) (Pending Frontend)
-- [ ] Main workflow completes on mobile (375px viewport) (Pending Frontend)
-- [ ] Loading state is visible during API call (Pending Frontend)
-- [ ] Error state is visible when the API returns 4xx or 5xx (Pending Frontend)
-- [ ] Evidence panel shows gaps explicitly when a field is missing (Pending Frontend)
-- [ ] RunComparison renders metric diffs correctly with direction indicators (Pending Frontend)
+## 4. Final submission
 
----
+- [ ] Reviewed member PRs and confirmed attribution in contribution matrix
+- [ ] Each member's actual AI-tool usage recorded
+- [ ] Current architecture, API, source register, five examples and ten-case report
+- [ ] Live demo/failure explanation rehearsed and actually presented when required
+- [ ] Final repository/release/deployment links and instructor-specific approvals
 
-## Environment Configuration
+User requested member/AI-use evidence be left until the end; those boxes are deliberately pending.
 
-- [x] All environment variables are set in the Vercel dashboard (not in the repo)
-- [x] `GROQ_API_KEY` is set and validated in Vercel → Project → Settings → Environment Variables
-- [x] `GEMINI_API_KEY` is set and validated in Vercel → Project → Settings → Environment Variables
-- [x] `NEXT_PUBLIC_APP_URL` is set to the production domain
-- [x] Environment is set to **Production** (not Preview) for the release deployment
+## 5. Rollback
 
----
-
-## Production Smoke Tests (Run After Deploy)
-
-Execute these against the live production URL:
-
-| Test | Expected result |
-|------|----------------|
-| `GET {PROD_URL}` | 200 — app loads, no console errors |
-| `POST {PROD_URL}/api/modelops` with valid payload | 200 + `ModelCardOutput` |
-| `POST {PROD_URL}/api/modelops` with empty body | 400 + validation error |
-| `POST {PROD_URL}/api/modelops/compare` with two runs | 200 + `metrics_diff` |
-| Open main page on mobile (375px) | Layout renders correctly |
-| Check browser DevTools → Network | No API key visible in any request/response |
-| Check browser DevTools → Console | No unhandled errors |
-
----
-
-## Documentation & Evidence
-
-- [x] `README.md` is accurate and setup instructions work from a clean environment
-- [x] `docs/architecture.md` reflects current module ownership and file structure
-- [x] `docs/api-contracts.md` matches the live API behavior
-- [x] `docs/known-gaps-and-limitations.md` is up to date
-- [ ] `docs/source-register.md` lists all sources used (Zein confirmed)
-- [ ] All `AI_USAGE.md` entries collected from every team member
-- [ ] Contribution matrix is complete (who wrote what)
-- [ ] 10-case evaluation report is complete (Zein confirmed)
-- [x] Repository has a tagged release (e.g., `git tag v1.0.0`)
-
----
-
-## Release Procedure
-
-```bash
-# 1. Ensure dev branch is merged and up to date
-git checkout dev
-git pull origin dev
-
-# 2. Create the release branch
-git checkout -b release/v1.0.0
-
-# 3. Run the full pre-release gate above — all boxes must be checked
-
-# 4. Merge release branch into main
-git checkout main
-git merge --no-ff release/v1.0.0
-
-# 5. Tag the release
-git tag -a v1.0.0 -m "Production release v1.0.0 — Session 5"
-git push origin main --tags
-
-# 6. Vercel auto-deploys from main — confirm deployment succeeded in Vercel dashboard
-
-# 7. Run production smoke tests against the live URL
-
-# 8. Record the production URL below
-```
-
-**Production URL:** https://model-ops.vercel.app/modelops
-
----
-
-## Rollback Procedure
-
-If the production deployment fails or the smoke tests reveal a critical issue:
-
-```bash
-# Option 1 — Instant rollback via Vercel dashboard
-# Vercel → Project → Deployments → find the last working deployment → "Promote to Production"
-
-# Option 2 — Git revert if a bad commit was pushed to main
-git revert <bad-commit-hash>
-git push origin main
-# Vercel will redeploy automatically from the revert commit
-
-# Option 3 — Force-push the previous known-good tag (last resort)
-git checkout main
-git reset --hard v0.9.0    # replace with last known-good tag
-git push --force-with-lease origin main
-```
-
-**Recovery notes:**
-- Environment variables in Vercel are not affected by a code rollback — they persist across deployments.
-- If a provider API key was rotated and broke production, update the key in Vercel dashboard → no redeploy needed (it takes effect on next request).
-- After any rollback, open an issue describing what failed, what was rolled back, and what must change before re-deploying.
-
----
-
-## Known Limitations at Release
-
-Carry forward the current state of `docs/known-gaps-and-limitations.md`. Confirm these are documented before sign-off:
-
-- [ ] Metric direction detection is name-based (may misfire on unusual metric names)
-- [ ] Missing metrics default to 0 in `compare_runs()` — can produce misleading "improved" labels
-- [ ] Test quality not evaluated — presence only
-- [ ] Source register covers MLflow documentation only
-- [ ] English-only — no multilingual support
-
----
-
-*Sign off: Ahmed Amir Rusrus confirms all boxes above are checked before the production URL is shared publicly.*
+Use the hosting platform's supported previous-deployment rollback after checking database compatibility, or a reviewed git revert. Do not reset shared history or force-push as routine recovery. Database migrations need separately reviewed forward/recovery plans. Environment changes require a new deployment to bind the intended values, especially NEXT_PUBLIC values embedded at build time. After recovery rerun smoke and protected workflow; retain incident evidence.

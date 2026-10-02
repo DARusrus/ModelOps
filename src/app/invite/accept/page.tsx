@@ -4,6 +4,7 @@ import AuthFrame from '@/components/auth/AuthFrame';
 import InvitationAcceptance from './InvitationAcceptance';
 import { InvitationIdSchema } from '@/domain/organization/contracts';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getVerifiedUser } from '@/lib/supabase/verified-user';
 
 export const metadata = { title: 'Accept invitation | ModelOps', description: 'Join a ModelOps organization using a verified invitation.' };
 
@@ -31,7 +32,7 @@ export default async function AcceptInvitationPage({ searchParams }: { searchPar
   }
   const invitationId = parsedInvitation.data;
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getVerifiedUser(supabase);
   if (!user) {
     const next = `/invite/accept?invitation=${encodeURIComponent(invitationId)}`;
     redirect(`/login?next=${encodeURIComponent(next)}`);

@@ -107,7 +107,8 @@ export const MetricDiffSchema = z.discriminatedUnion('comparison_status', [Compa
 export type MetricDiff = z.infer<typeof MetricDiffSchema>;
 export const CompareRunsOutputSchema = z.object({
   model_name_1: z.string(), version_1: z.string(), model_name_2: z.string(), version_2: z.string(),
-  metrics_diff: z.array(MetricDiffSchema), readiness_score_1: z.number(), readiness_score_2: z.number(), readiness_delta: z.number(), summary: z.array(z.string()),
+  metrics_diff: z.array(MetricDiffSchema), readiness_score_1: z.number().min(0).max(100), readiness_score_2: z.number().min(0).max(100), readiness_delta: z.number().nullable(), summary: z.array(z.string()),
+  rubric_version_1: z.string().optional(), rubric_version_2: z.string().optional(),
 }).strict();
 
 export const EvaluationSummarySchema = z.object({

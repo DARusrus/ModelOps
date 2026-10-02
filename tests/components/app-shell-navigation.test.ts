@@ -3,10 +3,10 @@ import { isNavigationItemActive, navigationItemsForRole } from '../../src/compon
 
 describe('workspace navigation contract', () => {
   it('exposes only live routes and limits member administration to administrators', () => {
-    expect(navigationItemsForRole('viewer').map((item) => item.href)).toEqual(['/evaluations']);
-    expect(navigationItemsForRole('editor').map((item) => item.href)).toEqual(['/evaluations', '/compare']);
-    expect(navigationItemsForRole('reviewer').map((item) => item.href)).toEqual(['/evaluations', '/compare']);
-    expect(navigationItemsForRole('admin').map((item) => item.href)).toEqual(['/evaluations', '/compare', '/settings/members']);
+    expect(navigationItemsForRole('viewer').map((item) => item.href)).toEqual(['/dashboard', '/evaluations']);
+    expect(navigationItemsForRole('editor').map((item) => item.href)).toEqual(['/dashboard', '/evaluations', '/compare']);
+    expect(navigationItemsForRole('reviewer').map((item) => item.href)).toEqual(['/dashboard', '/evaluations', '/reviews', '/compare']);
+    expect(navigationItemsForRole('admin').map((item) => item.href)).toEqual(['/dashboard', '/evaluations', '/reviews', '/compare', '/settings/members']);
   });
 
   it('marks exact and nested destinations without matching sibling paths', () => {

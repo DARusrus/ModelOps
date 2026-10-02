@@ -10,19 +10,19 @@
  */
 
 export const READINESS_SCORE_FORMULA =
-  'total = identification(max 10) + dataset(max 15) + metrics(max 25) ' +
-  '+ governance(max 25) + testing(max 25), clamped between 0 and 100';
+  'Current cards use the versioned structured evidence rubric (10 + 15 + 25 + 25 + 25). ' +
+  'Unversioned legacy fixtures retain the historical completeness formula.';
 
 export const COMPARE_RUNS_RULES = [
   {
     rule: 'Metric direction',
     behavior:
-      'A metric is treated as "lower is better" only if its key name contains ' +
-      '"loss" or "error" (case-insensitive). All other metrics assume higher is better.',
+      'metric-registry.ts supplies explicit directions and recognized names/suffixes. ' +
+      'Unknown directions are not labelled improvements. Structured evidence must be comparable.',
   },
   {
     rule: 'Readiness delta',
-    behavior: 'readiness_delta = readiness_score(run2) - readiness_score(run1).',
+    behavior: 'Saved scores are retained. Same-rubric delta is score2 - score1; different rubrics yield null.',
   },
   {
     rule: 'Missing metrics',

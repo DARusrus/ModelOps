@@ -1,183 +1,73 @@
-# ModelOps — ML Experiment, Model Card & Readiness Assistant
+# ModelOps — Team 11
 
-> A lightweight ML governance workspace for student ML teams, research labs, and small AI engineering teams.
+A small, authenticated ML-governance workspace for recording experiment evidence, comparing saved evaluations and making human review decisions. It does not train models, execute submitted test names or certify safety.
 
----
+## Current workflow
 
-## What It Does
+Sign in → select/create an organization → edit intake at `/evaluations/new` → save an immutable evaluation → review its evidence and workflow → compare authorized saved IDs → export the dossier.
 
-ModelOps lets you submit ML experiment metadata and receive a structured, evidence-based model card — with no invention, no hallucination, and no auto-approval.
+The server validates input, computes the evidence rubric and persists the result atomically. Optional AI selects guidance from a small approved catalogue; it cannot supply model facts, scores or approval. Missing or invalid AI output leaves deterministic evaluation available.
 
-**Production workflow:**
+## Stack and setup
 
-```
-User submits experiment metadata (model, dataset, metrics)
-        ↓
-Server validates input (Zod schema — before any AI is called)
-        ↓
-AI drafts a model card strictly from the submitted evidence
-        ↓
-readiness_score() evaluates documentation completeness (deterministic)
-        ↓
-compare_runs() produces side-by-side metric diffs (deterministic)
-        ↓
-Structured result is returned for human review
-```
+The committed manifest/lockfile are authoritative: Next.js 16.3.8, React 19, TypeScript, Zod, Tailwind, Supabase Auth/PostgreSQL, optional Groq/Gemini, Sentry, Vitest and Playwright. Node 22 is required (`.nvmrc`); package manager: npm 10.9.0. The handbook audit found no framework patch-version pin.
 
-**Non-negotiable rule:** If evidence is missing, the gap is flagged. Nothing is ever invented.
+From the directory containing `package.json`, in PowerShell:
 
----
-
-## Team — Team 11
-
-| Name | Role |
-|------|------|
-| **Ahmed Amir Rusrus** *(Lead)* | Integration Lead / Solution Architect |
-| Moamen Elkholy | AI & Backend Engineer |
-| Mohamed Said Mohamed Barakat | Product UI & Workflow Engineer |
-| Zein ElDin Mohamed Farouk | Knowledge, Tools & Quality Engineer |
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 15 (App Router, TypeScript strict) |
-| AI — Primary | Groq (`llama-3.3-70b-versatile`) |
-| AI — Fallback | Google Gemini (`gemini-1.5-flash`) |
-| Validation | Zod |
-| Testing | Vitest |
-| Deployment | Vercel |
-
----
-
-## Local Setup
-
-### Prerequisites
-
-- Node.js 18+
-- A Groq API key — [console.groq.com](https://console.groq.com)
-- A Gemini API key — [ai.google.dev](https://ai.google.dev)
-
-### Steps
-
-```bash
-# 1. Clone the repository
-git clone <repo-url>
-cd ModelOps-main
-
-# 2. Install dependencies
-npm install
-
-# 3. Configure environment variables
-cp .env.example .env.local
-# Open .env.local and fill in your API keys
-
-# 4. Start the development server
+```powershell
+npm ci
+Copy-Item .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Edit `.env.local` before starting: set the matching Supabase URL, publishable key, server-only secret and local app URL. Apply the committed migrations in filename order to your own development database. Authentication redirect URLs must match that environment. Do not use the production database for integration fixtures.
 
-### Environment Variables
+AI keys are optional. Keep `AI_EGRESS_MODE=disabled` until provider/data review is complete. Enabling `non_sensitive_only` additionally requires each input to explicitly declare public, non-sensitive data. Public Supabase keys and Sentry ingest DSNs are not server secrets; Supabase secret, AI credentials and source-map upload token must never use `NEXT_PUBLIC_`.
 
-Copy `.env.example` to `.env.local` and set the following:
+## Routes
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GROQ_API_KEY` | Groq API key for primary AI generation | Yes |
-| `GEMINI_API_KEY` | Google Gemini API key for fallback + structured output | Yes |
-| `NEXT_PUBLIC_APP_URL` | Public base URL (use `http://localhost:3000` for local dev) | No |
+| Page | Purpose |
+|---|---|
+| `/login`, `/signup`, `/forgot-password`, `/reset-password` | Authentication |
+| `/onboarding`, `/select-organization`, `/invite/accept` | Membership and initial workspace |
+| `/dashboard` | Tenant-scoped summary and activity |
+| `/evaluations`, `/evaluations/new`, `/evaluations/[id]` | Catalog, editable intake and immutable saved record |
+| `/compare`, `/reviews`, `/settings/members` | Authorized comparison, reviewer queue and administration |
+| `/modelops` | Existing compatibility workspace |
 
-> **Security:** `.env.local` is git-ignored. Never commit API keys. Both keys are server-side only — they never reach the client bundle.
+Page visibility does not replace API authorization or database checks.
 
----
+## Validation
 
-## Available Scripts
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start development server |
-| `npm run build` | Production build |
-| `npm run start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npm test` | Run all tests with Vitest |
-
----
-
-## Architecture
-
-See [`docs/architecture.md`](docs/architecture.md) for the full system design including:
-
-- Production data flow diagram
-- Module ownership table (who owns what)
-- Actual file structure
-- API surface and contracts
-- Security rules
-- Provider strategy (Groq primary / Gemini fallback / deterministic offline)
-
----
-
----
-
-## Documentation Index
-
-All detailed architecture, security, features, and engineering documentation are organized in the [`docs/`](docs/) directory:
-
-- 📖 **[All Features Guide (Plain Terms)](docs/all_features.md)** — Clear, user-friendly explanation of all platform capabilities.
-- 🛡️ **[Security, NIST AI RMF & Compliance Audit](docs/security_audit.md)** — Complete security analysis, threat modeling, Zod validation, and cryptographic audit signatures.
-- 🏛️ **[Software Engineering & Architecture Audit](docs/ARCHITECTURE_AUDIT.md)** — In-depth architectural review covering Clean Architecture, SOLID, and type safety.
-- 🎨 **[Frontend UI/UX Design System Log](docs/Frontend_new.md)** — Comprehensive documentation of design tokens, layout hierarchy, and the 5-tab interface.
-- 🚀 **[New Features & Backend Systems Guide](docs/New_features.md)** — Technical details on the BYOK AI Gateway, live WWIT simulator, multi-version timeline, and scoring engine.
-- 🎬 **[Demo & Defense Walkthrough Script](docs/DEMO_SCRIPT.md)** — Step-by-step presentation script for live evaluators.
-- 📐 **[System Architecture & Data Flows](docs/architecture.md)** — Component taxonomy, data journey, and provider fallback sequence.
-- 📜 **[API Contracts Specification](docs/api-contracts.md)** — Request/response schemas and HTTP error mappings.
-
----
-
-## Running Tests
-
-```bash
-# All tests
+```powershell
+npm run lint
+npx tsc --noEmit
 npm test
-
-# Watch mode during development
-npx vitest
+npm run test:evaluation
+npx playwright install chromium
+npm run test:review-queue
+npm run test:browser-auth
+npm run test:catalog
+npm run test:production-smoke
+npm run build
+npm audit --omit=dev --audit-level=high
+npm audit --audit-level=moderate
 ```
 
-Tests live in `tests/` and cover:
+The ten-case report is generated under `test-results/`, not guessed from a checklist. Local tests skip the opt-in live integration suite. `tests/e2e/workflow.test.ts` tests service flow, not a real browser. Run the guarded PowerShell integration/browser/performance runners against a separate disposable Supabase project for live proof; they prompt for secrets without committing them.
 
-- API route validation (valid input, invalid input, missing fields)
-- `readiness_score()` scoring logic across all rubric categories
-- `compare_runs()` metric diff and direction detection
-- End-to-end workflow
+## Documentation
 
----
+- [Architecture](docs/architecture.md), [API contracts](docs/api-contracts.md)
+- [Readiness rubric](docs/readiness-checklist.md), [model-card/editor scope](docs/model-card-template.md)
+- [Approved sources](docs/source-register.md), [AI use](docs/ai-usage.md)
+- [Limitations](docs/known-gaps-and-limitations.md), [security checks](docs/security-checklist.md)
+- [Release gates](docs/release-checklist.md), [demo](docs/DEMO_SCRIPT.md)
+- [Closure plan](docs/handbook-closure-plan.md), [verification record](docs/handbook-closure-results.md)
+- [Contribution evidence](docs/contribution-matrix.md)
 
-## Known Limitations
+Older audits, session logs and feature proposals in `docs/` are historical, not current release proof. No high score is a deployment approval.
 
-See [`docs/known-gaps-and-limitations.md`](docs/known-gaps-and-limitations.md) for a full honest account. Key items:
+## Recorded team roster
 
-- Metric direction detection is name-based (`loss`/`error` = lower is better; all others = higher is better)
-- Missing metrics in one run default to 0, which can produce misleading "improved" labels — flagged in `tool-rules.ts`
-- Test quality is not evaluated — only presence is checked in `readiness_score()`
-- Source register currently covers MLflow documentation only
-
----
-
-## Out of Scope
-
-The following will not be built and must not be added:
-
-- Model training inside the app
-- Claiming fairness or safety without evidence
-- Auto-approving deployment without explicit human review
-
----
-
-## Deployment
-
-The production build is deployed to Vercel. See [`docs/release-checklist.md`](docs/release-checklist.md) for the full production gate procedure.
-
-Environment variables must be set in the Vercel dashboard under **Project → Settings → Environment Variables** — not in the repository.
+Ahmed Amir Rusrus — integration/architecture; Haneen Magdy — AI/backend; Mohamed Said Mohamed Barakat — UI/workflow; Zein ElDin Mohamed Farouk — knowledge/tools/quality. Reviewed PR ownership and individual AI-use confirmation remain separate final evidence, not inferred from this roster.

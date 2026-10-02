@@ -174,6 +174,11 @@ export default function RunComparison({
       )}
 
       {activeComparison && (
+        <p className="border border-slate-300 bg-slate-50 p-3 text-sm text-slate-800">
+          {activeComparison.summary.join(' ')} Rubrics: {activeComparison.rubric_version_1 || 'legacy'} / {activeComparison.rubric_version_2 || 'legacy'}.
+        </p>
+      )}
+      {activeComparison && (
         <div className="overflow-x-auto rounded border border-slate-200">
           <table aria-label="Comparison metrics" className="w-full min-w-[640px] text-left text-xs">
             <thead className="bg-slate-100 text-slate-600"><tr><th scope="col" className="p-3">Metric</th><th scope="col" className="p-3">Baseline</th><th scope="col" className="p-3">Candidate</th><th scope="col" className="p-3">Result</th></tr></thead>

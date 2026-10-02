@@ -13,13 +13,16 @@ const result = {
 const mocks = vi.hoisted(() => ({
   adminClient: vi.fn(), serverClient: vi.fn(), requireActor: vi.fn(), process: vi.fn(),
   claim: vi.fn(), abandon: vi.fn(), idempotencyKey: vi.fn(), fingerprint: vi.fn(),
+  publicInput: vi.fn(),
+  env: { AI_EGRESS_MODE: 'disabled', GROQ_API_KEY: 'test-only' },
 }));
 
+vi.mock('../../src/lib/env', () => ({ env: mocks.env }));
 vi.mock('../../src/lib/auth/actor', () => ({ requireDefaultActor: mocks.requireActor }));
 vi.mock('../../src/lib/supabase/admin', () => ({ createSupabaseAdminClient: mocks.adminClient }));
 vi.mock('../../src/lib/supabase/server', () => ({ createSupabaseServerClient: mocks.serverClient }));
 vi.mock('../../src/lib/modelops/service', () => ({
-  isPublicNonSensitiveEvaluation: vi.fn().mockReturnValue(false),
+  isPublicNonSensitiveEvaluation: mocks.publicInput,
   processModelOpsRequest: mocks.process,
 }));
 vi.mock('../../src/lib/idempotency', () => ({
@@ -42,6 +45,8 @@ function request() {
 describe('POST /api/modelops atomic persistence boundary', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.env.AI_EGRESS_MODE = 'disabled';
+    mocks.publicInput.mockReturnValue(false);
     mocks.requireActor.mockResolvedValue({ userId: actorId, organizationId, role: 'admin' });
     mocks.claim.mockResolvedValue({ action: 'claimed' });
     mocks.idempotencyKey.mockReturnValue(requestKey);
@@ -109,4 +114,24 @@ describe('POST /api/modelops atomic persistence boundary', () => {
     expect(mocks.abandon).toHaveBeenCalledOnce();
     expect(await response.json()).toMatchObject({ success: false, error: 'Evaluation could not be saved' });
   });
+
+  it.each(['provider_unavailable', 'deterministic_only', 'ai_suggestion_available'] as const)(
+    'refunds reserved AI quota only when suggestions are unavailable (%s)',
+    async (status) => {
+      mocks.env.AI_EGRESS_MODE = 'non_sensitive_only';
+      mocks.publicInput.mockReturnValue(true);
+      const card = { ...result, ai_suggestions: { status, prompt_template_version: '2026-10-02.1', items: [] } };
+      mocks.process.mockResolvedValue(card);
+      const rpc = vi.fn().mockImplementation(async (name) => ({
+        data: name === 'persist_model_card_idempotently' ? { ...card, record_id: recordId } : true,
+        error: null,
+      }));
+      mocks.adminClient.mockReturnValue({ rpc });
+      mocks.serverClient.mockResolvedValue({ rpc: vi.fn().mockResolvedValue({ data: true, error: null }) });
+      expect((await POST(request())).status).toBe(200);
+      expect(rpc).toHaveBeenCalledWith('consume_ai_quota', { target_org: organizationId, daily_limit: 100, monthly_limit: 2000 });
+      const releases = rpc.mock.calls.filter(([name]) => name === 'release_ai_quota');
+      expect(releases).toHaveLength(status === 'ai_suggestion_available' ? 0 : 1);
+    },
+  );
 });

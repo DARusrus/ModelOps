@@ -4,6 +4,11 @@ import { decodeEvaluationCursor, encodeEvaluationCursor, evaluationCursorFilter 
 const cursor = { createdAt: '2026-09-04T12:30:00.000Z', id: '00000000-0000-4000-8000-000000000001', sort: 'newest' as const };
 
 describe('saved evaluation cursor', () => {
+  it('preserves PostgreSQL microseconds and offsets in the exact seek predicate', () => {
+    const precise = { ...cursor, createdAt: '2026-09-21T12:00:00.510661+00:00' };
+    expect(decodeEvaluationCursor(encodeEvaluationCursor(precise))).toEqual(precise);
+    expect(evaluationCursorFilter(decodeEvaluationCursor(encodeEvaluationCursor(precise)))).toContain('.510661+00:00');
+  });
   it('round-trips a versioned cursor and canonicalizes its timestamp', () => {
     expect(decodeEvaluationCursor(encodeEvaluationCursor(cursor))).toEqual(cursor);
   });

@@ -36,7 +36,7 @@ export default function InvitationAcceptance({ invitationId }: { invitationId: s
         }
       }
       await requestJson(`/api/organization/invitations/${invitationId}/accept`, { method: 'POST' });
-      router.replace('/modelops');
+      router.replace('/dashboard');
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The invitation could not be accepted.');

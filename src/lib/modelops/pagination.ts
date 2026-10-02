@@ -34,7 +34,8 @@ export function decodeEvaluationCursor(value: string): EvaluationCursor {
     const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
     const parsed = decoded?.version === 1 ? LegacyCursorSchema.parse(decoded) : CursorSchema.parse(decoded);
     return {
-      createdAt: new Date(parsed.created_at).toISOString(),
+      // PostgreSQL stores microseconds; Date conversion would truncate the seek boundary.
+      createdAt: parsed.created_at,
       id: parsed.id,
       sort: parsed.version === 1 ? 'newest' : parsed.sort,
     };

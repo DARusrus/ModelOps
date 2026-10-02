@@ -4,6 +4,7 @@ import { ACTIVE_ORGANIZATION_COOKIE, activeOrganizationCookieOptions } from '@/l
 import { readJsonRequest, withRequestId } from '@/lib/http';
 import { createErrorResponse, createSuccessResponse } from '@/lib/modelops/validators';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getVerifiedUser } from '@/lib/supabase/verified-user';
 
 async function post(request: Request) {
   try {
@@ -11,7 +12,7 @@ async function post(request: Request) {
     if ('error' in parsedRequest) return parsedRequest.error;
     const body = CreateWorkspaceRequestSchema.parse(parsedRequest.body);
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getVerifiedUser(supabase);
     if (!user) return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
 
     const { data, error } = await supabase.rpc('create_initial_workspace', { workspace_name: body.workspace_name }).single();

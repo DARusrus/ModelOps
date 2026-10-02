@@ -3,6 +3,7 @@ import { InvitationAcceptanceResponseSchema, InvitationAcceptanceRpcSchema, Invi
 import { withRequestId } from '@/lib/http';
 import { createErrorResponse, createSuccessResponse } from '@/lib/modelops/validators';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getVerifiedUser } from '@/lib/supabase/verified-user';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -13,7 +14,7 @@ async function post(_request: Request, context: RouteContext) {
 
   try {
     const supabase = await createSupabaseServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getVerifiedUser(supabase);
     if (!user) return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     const { data, error } = await supabase.rpc('accept_organization_invitation', { target_invitation: parsedId.data }).single();
     if (error || !data) {

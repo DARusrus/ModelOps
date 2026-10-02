@@ -9,9 +9,20 @@ export interface WorkspaceNavigationItem {
 
 const navigationItems: readonly WorkspaceNavigationItem[] = [
   {
+    href: '/dashboard',
+    label: 'Dashboard',
+    description: 'Review organization state and recent work.',
+  },
+  {
     href: '/evaluations',
     label: 'Evaluations',
     description: 'Search, create, and inspect governed dossiers.',
+  },
+  {
+    href: '/reviews',
+    label: 'Reviews',
+    description: 'Find submitted work awaiting governance review.',
+    roles: ['reviewer', 'admin'],
   },
   {
     href: '/compare',

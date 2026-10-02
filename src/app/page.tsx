@@ -8,5 +8,5 @@ export default async function HomePage() {
   } catch (error) {
     redirect(workspaceAccessRedirect(error));
   }
-  redirect('/modelops');
+  redirect('/dashboard');
 }

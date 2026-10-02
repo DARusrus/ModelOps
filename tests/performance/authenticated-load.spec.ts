@@ -72,7 +72,7 @@ async function authenticate(page: Page, fixture: BrowserFixture) {
   await page.getByLabel('Email').fill(fixture.user.email);
   await page.getByLabel('Password', { exact: true }).fill(fixture.user.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/modelops$/);
+  await expect(page).toHaveURL(/\/dashboard$/);
 }
 
 async function runBounded<T>(count: number, concurrency: number, task: (index: number) => Promise<T>) {
@@ -148,6 +148,16 @@ performanceDescribe('authenticated bounded performance validation', () => {
       }
     });
 
+    const operationalReadSamples = Math.max(10, readsPerSecond * 5);
+    await runBounded(operationalReadSamples, concurrency, async (index) => {
+      const operation = index % 2 === 0 ? 'dashboard' : 'reviews';
+      const target = operation === 'dashboard' ? '/api/dashboard' : '/api/reviews?limit=20';
+      const read = await measured(operation, () => page.request.get(target));
+      measurements.push(read.measurement);
+      await expectSuccessful(read.response);
+      expect(read.measurement.request_id).toBeTruthy();
+    });
+
     const stabilityDeadline = Date.now() + stabilitySeconds * 1_000;
     while (Date.now() < stabilityDeadline) {
       const tickStarted = Date.now();
@@ -170,6 +180,7 @@ performanceDescribe('authenticated bounded performance validation', () => {
         concurrency,
         stability_seconds: stabilitySeconds,
         reads_per_second: readsPerSecond,
+        operational_read_samples: operationalReadSamples,
         latency_budgets_ms: { create_max: createMaxBudgetMs, mutation_max: mutationMaxBudgetMs, read_p95: readP95BudgetMs },
       },
       results,
@@ -187,5 +198,7 @@ performanceDescribe('authenticated bounded performance validation', () => {
     enforceMax(results, 'review.under_review', mutationMaxBudgetMs);
     enforceMax(results, 'review.rejected', mutationMaxBudgetMs);
     enforceP95(results, 'list', readP95BudgetMs);
+    enforceP95(results, 'dashboard', readP95BudgetMs);
+    enforceP95(results, 'reviews', readP95BudgetMs);
   });
 });

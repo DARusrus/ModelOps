@@ -10,7 +10,7 @@ describe('auth continuation allowlist', () => {
 
   it('rejects external, protocol-relative, encoded, fragmented, and unknown destinations', () => {
     for (const value of ['https://attacker.test', '//attacker.test', '/%2f%2fattacker.test', '/modelops#token', '/unknown', '\\\\attacker.test']) {
-      expect(safeAuthContinuation(value)).toBe('/modelops');
+      expect(safeAuthContinuation(value)).toBe('/dashboard');
     }
   });
 });

@@ -64,7 +64,7 @@ function OrganizationSelector({ context, compact = false }: { context: Workspace
       // An organization change is a tenant boundary. A document replacement
       // clears every organization-scoped client cache and component state
       // after the server has committed the new secure selection cookie.
-      window.location.replace('/evaluations');
+      window.location.replace('/dashboard');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Organization could not be switched.');
       setSwitching(false);
@@ -143,7 +143,7 @@ export default function AppShell({ context, children }: { context: WorkspaceCont
             <Menu className="h-5 w-5" aria-hidden="true" />
           </button>
 
-          <Link href="/evaluations" className={`flex min-w-0 items-center gap-3 rounded ${focusRing}`}>
+          <Link href="/dashboard" className={`flex min-w-0 items-center gap-3 rounded ${focusRing}`}>
             <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-emerald-800 text-white">
               <ShieldCheck className="h-5 w-5" aria-hidden="true" />
             </span>
