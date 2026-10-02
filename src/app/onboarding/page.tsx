@@ -1,11 +1,12 @@
 import { redirect } from 'next/navigation';
 import AuthFrame from '@/components/auth/AuthFrame';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getVerifiedUser } from '@/lib/supabase/verified-user';
 import OnboardingForm from './OnboardingForm';
 
 export default async function OnboardingPage() {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getVerifiedUser(supabase);
   if (!user) redirect('/login?next=%2Fonboarding');
 
   return (

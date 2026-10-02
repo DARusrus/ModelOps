@@ -7,24 +7,26 @@ import { Sparkles } from 'lucide-react';
 interface LandingHeroProps {
   activeTemplateId: string | null;
   onSelectTemplate: (template: ModelTemplate) => void;
+  compact?: boolean;
 }
 
-export default function LandingHero({ activeTemplateId, onSelectTemplate }: LandingHeroProps) {
+export default function LandingHero({ activeTemplateId, onSelectTemplate, compact = false }: LandingHeroProps) {
   return (
     <section id="templates" className="text-center mb-10 animate-fadeIn scroll-mt-20">
-      {/* 1. Pill Badge */}
-      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 border border-green-200 text-[#13715B] text-xs font-semibold rounded-md mb-4 shadow-2xs">
-        <Sparkles className="h-3.5 w-3.5 text-[#13715B]" />
-        <span>Free AI Governance Tool</span>
-      </div>
-
-      {/* 2. Main Heading & Subtitle */}
-      <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight mb-3">
-        Model card generator
-      </h1>
-      <p className="text-sm sm:text-base text-gray-600 max-w-2xl mx-auto leading-relaxed mb-8">
-        Choose an archetype to open a blank evidence workspace with relevant guidance. Templates never prefill model facts, test results, or readiness evidence.
-      </p>
+      {!compact && (
+        <>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 border border-green-200 text-[#13715B] text-xs font-semibold rounded-md mb-4 shadow-2xs">
+            <Sparkles className="h-3.5 w-3.5 text-[#13715B]" aria-hidden="true" />
+            <span>Free AI Governance Tool</span>
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight mb-3">
+            Model card generator
+          </h1>
+          <p className="text-sm sm:text-base text-gray-600 max-w-2xl mx-auto leading-relaxed mb-8">
+            Choose an archetype to open a blank evidence workspace with relevant guidance. Templates never prefill model facts, test results, or readiness evidence.
+          </p>
+        </>
+      )}
 
       {/* 3. 6 Interactive Template Cards */}
       <div className="text-left mb-8">

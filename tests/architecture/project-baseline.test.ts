@@ -14,15 +14,23 @@ const pageRoutes = [
   ['/forgot-password', 'src/app/forgot-password/page.tsx'],
   ['/reset-password', 'src/app/reset-password/page.tsx'],
   ['/invite/accept', 'src/app/invite/accept/page.tsx'],
-  ['/modelops', 'src/app/modelops/page.tsx'],
+  ['/modelops', 'src/app/(workspace)/modelops/page.tsx'],
+  ['/dashboard', 'src/app/(workspace)/dashboard/page.tsx'],
+  ['/evaluations', 'src/app/(workspace)/evaluations/page.tsx'],
+  ['/evaluations/new', 'src/app/(workspace)/evaluations/new/page.tsx'],
+  ['/evaluations/[id]', 'src/app/(workspace)/evaluations/[id]/page.tsx'],
+  ['/compare', 'src/app/(workspace)/compare/page.tsx'],
+  ['/reviews', 'src/app/(workspace)/reviews/page.tsx'],
   ['/onboarding', 'src/app/onboarding/page.tsx'],
   ['/select-organization', 'src/app/select-organization/page.tsx'],
   ['/forbidden', 'src/app/forbidden/page.tsx'],
-  ['/settings/members', 'src/app/settings/members/page.tsx'],
+  ['/settings/members', 'src/app/(workspace)/settings/members/page.tsx'],
 ] as const;
 
 const apiRoutes = [
   ['/api/health', 'src/app/api/health/route.ts'],
+  ['/api/dashboard', 'src/app/api/dashboard/route.ts'],
+  ['/api/reviews', 'src/app/api/reviews/route.ts'],
   ['/api/modelops', 'src/app/api/modelops/route.ts'],
   ['/api/modelops/[id]', 'src/app/api/modelops/[id]/route.ts'],
   ['/api/modelops/[id]/export', 'src/app/api/modelops/[id]/export/route.ts'],
@@ -56,6 +64,11 @@ async function sourceFiles(directory: string): Promise<string[]> {
 }
 
 describe('project baseline boundaries', () => {
+  it('keeps saved-card payload editing outside the public API', () => {
+    const route = readFileSync(path.join(root, 'src/app/api/modelops/[id]/route.ts'), 'utf8');
+    expect(route).toMatch(/export const GET/);
+    expect(route).not.toMatch(/export (?:const|async function|function) (?:PATCH|PUT|POST|DELETE)\b/);
+  });
   it('records the compatibility page and API inventory', () => {
     for (const [, file] of [...pageRoutes, ...apiRoutes]) {
       expect(() => readFileSync(path.join(root, file), 'utf8'), file).not.toThrow();
@@ -78,6 +91,21 @@ describe('project baseline boundaries', () => {
       const isClientModule = /^\s*['\"]use client['\"];?/m.test(source);
       const importsAdminClient = /from\s+['\"](?:@\/lib\/supabase\/admin|[^'\"]*\/supabase\/admin)['\"]/.test(source);
       return isClientModule && importsAdminClient ? [path.relative(root, file)] : [];
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('centralizes server-side Supabase user verification', async () => {
+    const files = await sourceFiles(path.join(root, 'src'));
+    const verificationModule = path.normalize(
+      path.join(root, 'src', 'lib', 'supabase', 'verified-user.ts'),
+    );
+    const violations = files.flatMap((file) => {
+      const source = readFileSync(file, 'utf8');
+      return path.normalize(file) !== verificationModule && /\.auth\.getUser\(\)/.test(source)
+        ? [path.relative(root, file)]
+        : [];
     });
 
     expect(violations).toEqual([]);
@@ -145,5 +173,23 @@ describe('project baseline boundaries', () => {
     expect(migration).toContain('member_membership.user_id');
     expect(migration).toMatch(/from public, anon, authenticated;/);
     expect(migration).toMatch(/to service_role;/);
+  });
+
+  it('keeps dashboard and review reads bounded, actor-checked, and service-role only', () => {
+    const migration = readFileSync(
+      path.join(root, 'supabase/migrations/202609210001_dashboard_review_queue.sql'),
+      'utf8',
+    );
+    expect(migration).toContain('membership.user_id = requesting_actor');
+    expect(migration).toContain("membership.role in ('reviewer', 'admin')");
+    expect(migration).toContain('limit recent_limit');
+    expect(migration).toContain('requested_limit not between 1 and 51');
+    expect(migration).toContain("card.workflow_state in ('submitted', 'under_review')");
+    expect(migration).toContain('on public.model_cards (organization_id, created_at desc, id desc)');
+    expect(migration).toContain('on public.model_cards (organization_id, expires_at)');
+    expect(migration).toMatch(/revoke execute on function public\.get_dashboard_snapshot_as[\s\S]+from public, anon, authenticated;/);
+    expect(migration).toMatch(/revoke execute on function public\.list_review_queue_as[\s\S]+from public, anon, authenticated;/);
+    expect(migration).toMatch(/grant execute on function public\.get_dashboard_snapshot_as[\s\S]+to service_role;/);
+    expect(migration).toMatch(/grant execute on function public\.list_review_queue_as[\s\S]+to service_role;/);
   });
 });

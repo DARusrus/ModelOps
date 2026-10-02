@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PasswordField from '@/components/auth/PasswordField';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { isTemporarySignInFailure, signInWithPassword } from '@/lib/supabase/password-auth';
 
 interface LoginFormProps {
   nextPath: string;
@@ -23,9 +24,11 @@ export default function LoginForm({ nextPath, initialMessage = '' }: LoginFormPr
     setSubmitting(true);
     setMessage('');
     try {
-      const { error } = await createSupabaseBrowserClient().auth.signInWithPassword({ email, password });
+      const { error } = await signInWithPassword(createSupabaseBrowserClient(), { email, password });
       if (error) {
-        setMessage('Sign-in failed. Check your email and password, then try again.');
+        setMessage(isTemporarySignInFailure(error)
+          ? 'Sign-in is temporarily unavailable. Please try again.'
+          : 'Sign-in failed. Check your email and password, then try again.');
         return;
       }
       router.replace(nextPath);

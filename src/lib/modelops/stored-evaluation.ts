@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ModelCardOutputSchema } from '@/domain/modelops/model-card';
+import { ModelCardOutputSchema, WorkflowStateSchema } from '@/domain/modelops/model-card';
 
 const StoredEvaluationSchema = z.object({
   id: z.string().uuid(),
@@ -17,6 +17,8 @@ const StoredEvaluationSummarySchema = z.object({
   model_name: z.string().min(1),
   model_version: z.string().min(1),
   readiness_score: z.coerce.number().min(0).max(100),
+  workflow_state: WorkflowStateSchema,
+  created_by: z.string().uuid(),
   created_at: z.string().datetime({ offset: true }),
   expires_at: z.string().datetime({ offset: true }),
 });

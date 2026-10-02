@@ -22,6 +22,45 @@ describe('Individual AI Providers', () => {
     vi.unstubAllGlobals();
   });
 
+  it.each([
+    ['groq', generateGroqResponse],
+    ['gemini', generateGeminiResponse],
+  ] as const)('keeps %s response-body consumption linked to caller cancellation', async (_name, generate) => {
+    const deadline = new AbortController();
+    let markBodyStarted!: () => void;
+    const bodyStarted = new Promise<void>((resolve) => { markBodyStarted = resolve; });
+    fetchMock.mockImplementation(async (_url, init) => ({
+      ok: true,
+      json: () => new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+        markBodyStarted();
+      }),
+    }));
+    const request = generate('test', 'test-key', deadline.signal);
+    const rejection = expect(request).rejects.toMatchObject({ status_code: 504, is_timeout: true });
+    await bodyStarted;
+    deadline.abort(new DOMException('Total deadline reached', 'TimeoutError'));
+    await rejection;
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['groq', generateGroqResponse],
+    ['gemini', generateGeminiResponse],
+  ] as const)('bounds %s stalled response bodies at each attempt deadline', async (_name, generate) => {
+    fetchMock.mockImplementation(async (_url, init) => ({
+      ok: true,
+      json: () => new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+      }),
+    }));
+    const rejection = expect(generate('test', 'test-key')).rejects.toMatchObject({ status_code: 504, is_timeout: true });
+    await vi.runAllTimersAsync();
+    await rejection;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   describe('Groq Provider', () => {
 
     it('should parse successful JSON response', async () => {

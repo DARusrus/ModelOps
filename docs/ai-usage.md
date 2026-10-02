@@ -1,3 +1,24 @@
+# Current implementation and evidence status — 2026-10-02
+
+This section supersedes technical claims in the historical log below. Historical personal-authorship/tool-use statements are retained as supplied records, not independently verified. Each member's actual AI use and reviewed PR evidence are pending final confirmation, as the user requested.
+
+1. Application AI is optional. Egress is disabled by default; enabling it requires an explicit public/non-sensitive input declaration. Provider secrets and model selection are server-owned, not browser BYOK.
+2. The provider selects eligible IDs from the versioned local guidance catalogue. Strict parsing rejects malformed JSON, unknown/ineligible IDs and extra fields. Server text and sources come from that catalogue; arbitrary generated facts, metrics and approval cannot enter a new card.
+3. Scoring uses structured evidence coverage in src/domain/modelops/evidence.ts. Identity, metrics and pending_human_review remain server-owned. AI suggestions do not earn score points.
+4. Invalid/unavailable provider output is labelled provider_unavailable and falls back to a submitted-evidence card; deterministic/offline mode is deterministic_only. Reserved AI quota is released when suggestions are unavailable.
+5. Optional providers use env-configured models and existing retry/circuit/concurrency controls. Live provider success has not been tested by the mocked ten-case matrix. Historical model IDs in the old log are not current defaults.
+6. No retrieval/vector database or agentic tool executor was added. Grounding is fixed-source guidance selection. Historical saved narratives are not rewritten by this correction.
+7. During this closure, Codex assisted file inspection, implementation, test creation, dependency patching and documentation. Automatic gates and controlled browser regressions were run; their results belong in the closure report. That does not establish which team member authored or reviewed prior work.
+8. UI/UX review skill influenced URL-authoritative queue state, cancellation, loading/error/retry and keyboard-friendly existing controls. Existing styling/interactions were retained; no redesign was performed.
+
+## Member evidence to complete at the end
+
+For each member supply actual tools/prompts or tasks used, accepted/rejected suggestions, files personally reviewed, manual checks and reviewed PR/commit links. Do not invent these entries or count the prepared demo script as completed live defense.
+
+---
+
+## Historical log — not the current technical specification
+
 # AI Usage & Architecture Documentation
 
 > **Role:** Senior AI Backend Engineer (Haneen)  
@@ -197,4 +218,3 @@ All generated and authored frontend code was verified through the following chec
 ### Remaining Open Questions
 
 No outstanding frontend implementation blockers remain.
-

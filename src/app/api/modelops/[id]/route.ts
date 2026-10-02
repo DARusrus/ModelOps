@@ -10,8 +10,13 @@ import { withRequestId } from '@/lib/http';
 const IdSchema = UuidSchema;
 
 async function get(_: Request, context: { params: Promise<{ id: string }> }) {
+  const parsedId = IdSchema.safeParse((await context.params).id);
+  if (!parsedId.success) {
+    return createErrorResponse('Saved evaluation ID is invalid', 400, undefined, 'VALIDATION_FAILED');
+  }
+
   try {
-    const id = IdSchema.parse((await context.params).id);
+    const id = parsedId.data;
     const actor = await requireDefaultActor('read');
     const supabase = await createSupabaseServerClient();
     const { data, error } = await supabase.from('model_cards').select('id, payload, created_at, expires_at, workflow_state').eq('id', id).eq('organization_id', actor.organizationId).gt('expires_at', new Date().toISOString()).limit(1);
@@ -22,7 +27,10 @@ async function get(_: Request, context: { params: Promise<{ id: string }> }) {
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHENTICATED') return createErrorResponse('Authentication is required', 401, undefined, 'UNAUTHENTICATED');
     if (error instanceof Error && ['FORBIDDEN', 'ORGANIZATION_SELECTION_REQUIRED'].includes(error.message)) return createErrorResponse('You are not authorized for this organization', 403);
-    if (error instanceof ZodError) return createErrorResponse('Saved evaluation ID is invalid', 400, undefined, 'VALIDATION_FAILED');
+    if (error instanceof ZodError) {
+      logger.error('[API /api/modelops/[id]] Stored evaluation contract violation');
+      return createErrorResponse('Saved evaluation could not be loaded', 500, undefined, 'INTERNAL_ERROR');
+    }
     logger.error('[API /api/modelops/[id]] Read failure', error);
     return createErrorResponse('Saved evaluation could not be loaded', 500, undefined, 'INTERNAL_ERROR');
   }

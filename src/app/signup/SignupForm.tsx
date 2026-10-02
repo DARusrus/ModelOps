@@ -24,7 +24,7 @@ export default function SignupForm({ nextPath }: { nextPath: string }) {
     setSubmitting(true);
     try {
       const callback = new URL('/auth/callback', window.location.origin);
-      callback.searchParams.set('next', nextPath === '/modelops' ? '/onboarding' : nextPath);
+      callback.searchParams.set('next', nextPath === '/dashboard' ? '/onboarding' : nextPath);
       const { data, error } = await createSupabaseBrowserClient().auth.signUp({
         email,
         password,
@@ -35,7 +35,7 @@ export default function SignupForm({ nextPath }: { nextPath: string }) {
         return;
       }
       if (data.session) {
-        router.replace(nextPath === '/modelops' ? '/onboarding' : nextPath);
+        router.replace(nextPath === '/dashboard' ? '/onboarding' : nextPath);
         router.refresh();
         return;
       }

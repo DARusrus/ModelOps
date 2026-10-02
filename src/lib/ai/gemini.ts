@@ -54,7 +54,7 @@ export async function generateGeminiResponse(
           },
         }),
         signal: attemptDeadline.signal,
-      }).finally(() => attemptDeadline?.dispose());
+      });
 
       if (!response.ok) {
         const errorText = (await response.text().catch(() => '')).slice(0, MAX_ERROR_BODY_LENGTH);
@@ -107,6 +107,10 @@ export async function generateGeminiResponse(
         throw new AIProviderErrorClass('gemini', 'Gemini request timed out', 504, true);
       }
       break;
+    } finally {
+      // Headers alone do not complete a request. Keep the parent and attempt
+      // deadlines connected until JSON/error-body consumption has finished.
+      attemptDeadline?.dispose();
     }
   }
 

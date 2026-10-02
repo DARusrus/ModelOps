@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { ModelCardOutput } from '@/types/modelops';
+import { generateMarkdownReport } from '@/lib/modelops/markdown-report';
 import { Download, Copy, Check, Printer, FileText, X } from 'lucide-react';
 
 interface ExportReportProps {
@@ -16,41 +17,7 @@ export default function ExportReport({ modelCard, card, onClose }: ExportReportP
 
   if (!activeCard) return null;
 
-  const generateMarkdownReport = (): string => {
-    return `# ModelOps Governance Report: ${activeCard.model_name} (v${activeCard.version})
-**Generated Date:** ${new Date().toISOString().split('T')[0]}
-**Dataset:** ${activeCard.dataset}
-**Readiness Score:** ${activeCard.readiness_score}/100
-**Governance Decision:** ${activeCard.decision}
-
----
-
-## 1. Executive Summary & Intended Use
-${activeCard.intended_use}
-
-## 2. Evaluation Metrics
-${Object.entries(activeCard.metrics || {})
-  .map(([k, v]) => `- **${k}**: ${v}`)
-  .join('\n')}
-
-## 3. Known Limitations
-${(activeCard.limitations || []).map((l) => `- ${l}`).join('\n')}
-
-## 4. Identified Operational Risks
-${(activeCard.risks || []).map((r) => `- ${r}`).join('\n')}
-
-## 5. Validation Tests
-${(activeCard.tests || []).map((t) => `- [x] ${t}`).join('\n')}
-
-## 6. Reproducibility Metadata
-\`\`\`
-${activeCard.reproducibility}
-\`\`\`
-
----
-*ModelOps Automated Governance Audit Trail — Human Sign-off Required*
-`;
-  };
+  const markdownReport = generateMarkdownReport(activeCard);
 
   const handleDownloadJSON = () => {
     if (activeCard.record_id) {
@@ -70,7 +37,7 @@ ${activeCard.reproducibility}
 
   const handleCopyMarkdown = async () => {
     try {
-      await navigator.clipboard.writeText(generateMarkdownReport());
+      await navigator.clipboard.writeText(markdownReport);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch (err) {
@@ -156,7 +123,7 @@ ${activeCard.reproducibility}
           Governance Report Preview (Markdown)
         </span>
         <pre className="p-4 rounded bg-gray-50 border border-gray-200 text-gray-800 text-xs font-mono overflow-x-auto max-h-64 leading-relaxed whitespace-pre-wrap">
-          {generateMarkdownReport()}
+          {markdownReport}
         </pre>
       </div>
     </section>

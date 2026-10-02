@@ -1,6 +1,47 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import nodeFetch from 'node-fetch';
+import { createAbortDeadline } from '../../src/lib/network/timeout';
 
 const CONFIRMATION = 'RUN_ON_DISPOSABLE_TEST_PROJECT';
+const FIXTURE_REQUEST_TIMEOUT_MS = 15_000;
+const CLEANUP_RETRY_DELAYS_MS = [250, 1_000] as const;
+const nodeFetchTransport = nodeFetch as unknown as typeof fetch;
+
+/** Keeps disposable fixture administration off Node 22's intermittently
+ * stalling Undici path and gives every remote operation a hard deadline. */
+const fixtureFetch: typeof fetch = async (input, init) => {
+  const deadline = createAbortDeadline(FIXTURE_REQUEST_TIMEOUT_MS, init?.signal);
+  try {
+    return await nodeFetchTransport(input, { ...init, signal: deadline.signal });
+  } catch (error) {
+    if (deadline.didTimeout()) {
+      const timeoutError = new Error(`Supabase browser fixture request timed out after ${FIXTURE_REQUEST_TIMEOUT_MS}ms`);
+      timeoutError.name = 'BrowserFixtureTimeoutError';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    deadline.dispose();
+  }
+};
+
+function isTransientTransportFailure(error: { message: string } | null): boolean {
+  return Boolean(error && /fetch failed|network error|timed?\s*out|aborted a request|ECONNRESET|ETIMEDOUT|UND_ERR_/i.test(error.message));
+}
+
+async function retryTransientCleanup<T extends { error: { message: string } | null }>(
+  operation: string,
+  request: () => PromiseLike<T>,
+): Promise<T> {
+  let result = await request();
+  for (const delayMs of CLEANUP_RETRY_DELAYS_MS) {
+    if (!isTransientTransportFailure(result.error)) return result;
+    console.warn(`[browser fixture] ${operation} hit a transient transport failure; retrying in ${delayMs}ms.`);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    result = await request();
+  }
+  return result;
+}
 
 export type BrowserFixture = {
   admin: SupabaseClient;
@@ -32,7 +73,10 @@ function config() {
 
 export async function createBrowserFixture(): Promise<BrowserFixture> {
   const { url, serviceRoleKey } = config();
-  const admin = createClient(url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const admin = createClient(url, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+    global: { fetch: fixtureFetch },
+  });
   const runId = crypto.randomUUID();
   const password = `ModelOps-browser-${crypto.randomUUID()}-safe`;
   const created = await admin.auth.admin.createUser({ email: `modelops-browser-${runId}@example.test`, password, email_confirm: true });
@@ -74,11 +118,26 @@ export async function createBrowserFixture(): Promise<BrowserFixture> {
 
 export async function removeBrowserFixture(fixture: BrowserFixture | undefined) {
   if (!fixture) return;
-  const onboardingOrganization = await fixture.admin.from('organizations').delete().eq('created_by', fixture.onboardingUser.id);
-  const organization = await fixture.admin.from('organizations').delete().eq('id', fixture.organizationId);
-  const onboardingUser = await fixture.admin.auth.admin.deleteUser(fixture.onboardingUser.id);
-  const invitedUser = await fixture.admin.auth.admin.deleteUser(fixture.invitedUser.id);
-  const user = await fixture.admin.auth.admin.deleteUser(fixture.user.id);
+  const onboardingOrganization = await retryTransientCleanup(
+    'delete onboarding organization',
+    () => fixture.admin.from('organizations').delete().eq('created_by', fixture.onboardingUser.id),
+  );
+  const organization = await retryTransientCleanup(
+    'delete primary organization',
+    () => fixture.admin.from('organizations').delete().eq('id', fixture.organizationId),
+  );
+  const onboardingUser = await retryTransientCleanup(
+    'delete onboarding user',
+    () => fixture.admin.auth.admin.deleteUser(fixture.onboardingUser.id),
+  );
+  const invitedUser = await retryTransientCleanup(
+    'delete invited user',
+    () => fixture.admin.auth.admin.deleteUser(fixture.invitedUser.id),
+  );
+  const user = await retryTransientCleanup(
+    'delete primary user',
+    () => fixture.admin.auth.admin.deleteUser(fixture.user.id),
+  );
   if (onboardingOrganization.error || organization.error || onboardingUser.error || invitedUser.error || user.error) {
     throw new Error(`Browser fixture cleanup failed: ${onboardingOrganization.error?.message || organization.error?.message || onboardingUser.error?.message || invitedUser.error?.message || user.error?.message}`);
   }

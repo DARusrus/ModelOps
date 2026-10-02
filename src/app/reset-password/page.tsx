@@ -3,12 +3,13 @@ import { cookies } from 'next/headers';
 import AuthFrame from '@/components/auth/AuthFrame';
 import { PASSWORD_RECOVERY_COOKIE } from '@/lib/auth/continuation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { getVerifiedUser } from '@/lib/supabase/verified-user';
 import ResetPasswordForm from './ResetPasswordForm';
 
 export default async function ResetPasswordPage() {
   const recoveryAuthorized = (await cookies()).get(PASSWORD_RECOVERY_COOKIE)?.value === '1';
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getVerifiedUser(supabase);
 
   if (!recoveryAuthorized || !user) {
     return (

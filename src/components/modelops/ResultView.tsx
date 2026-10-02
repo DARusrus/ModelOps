@@ -31,9 +31,12 @@ interface ResultViewProps {
   sessionHistory?: ModelCardOutput[];
   onNewEvaluation?: () => void;
   onApplyFixes?: (simulatedCard: ModelCardOutput) => void;
+  activeTab?: ResultTab;
+  onTabChange?: (tab: ResultTab) => void;
 }
 
-type TabKey = 'dossier' | 'simulator' | 'timeline' | 'policy' | 'compare';
+export type ResultTab = 'dossier' | 'simulator' | 'timeline' | 'policy' | 'compare';
+export const resultTabs: readonly ResultTab[] = ['dossier', 'simulator', 'timeline', 'policy', 'compare'];
 
 export default function ResultView({
   modelCard,
@@ -42,14 +45,22 @@ export default function ResultView({
   sessionHistory = [],
   onNewEvaluation,
   onApplyFixes,
+  activeTab: controlledTab,
+  onTabChange,
 }: ResultViewProps) {
   const activeCard = card || modelCard;
-  const [activeTab, setActiveTab] = useState<TabKey>('dossier');
+  const [localTab, setLocalTab] = useState<ResultTab>('dossier');
   const [showExport, setShowExport] = useState(false);
+  const activeTab = controlledTab ?? localTab;
+
+  const selectTab = (tab: ResultTab) => {
+    if (controlledTab === undefined) setLocalTab(tab);
+    onTabChange?.(tab);
+  };
 
   if (!activeCard) return null;
 
-  const tabs: { key: TabKey; label: string; icon: React.ReactNode; badge?: string }[] = [
+  const tabs: { key: ResultTab; label: string; icon: React.ReactNode; badge?: string }[] = [
     { key: 'dossier', label: 'Model Card Dossier', icon: <FileText className="w-4 h-4" /> },
     {
       key: 'simulator',
@@ -137,7 +148,8 @@ export default function ResultView({
             <button
               key={t.key}
               type="button"
-              onClick={() => setActiveTab(t.key)}
+              onClick={() => selectTab(t.key)}
+              aria-pressed={isActive}
               className={`flex-1 min-w-[140px] px-3.5 py-2 rounded text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                 isActive
                   ? 'bg-[#13715B] text-white shadow-xs'

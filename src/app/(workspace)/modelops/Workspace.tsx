@@ -2,8 +2,6 @@
 
 import React, { useState, useRef } from 'react';
 import { ModelCardOutput, ModelOpsInput, UIState } from '@/types/modelops';
-import Navbar from '@/components/layout/Navbar';
-import Footer from '@/components/layout/Footer';
 import LandingHero from '@/components/modelops/LandingHero';
 import WizardForm from '@/components/modelops/WizardForm';
 import ResultView from '@/components/modelops/ResultView';
@@ -14,11 +12,11 @@ import ErrorState from '@/components/common/ErrorState';
 import ErrorBoundary from '@/components/common/ErrorBoundary';
 import { ModelTemplate } from '@/components/modelops/model-templates';
 import { ResultViewSkeleton } from '@/components/modelops/Skeletons';
-import { ArrowLeft, RotateCcw, LayoutGrid, RefreshCw, SearchX } from 'lucide-react';
+import { ArrowLeft, History, LayoutGrid, RefreshCw, RotateCcw, SearchX, Sparkles } from 'lucide-react';
 import { ApiClientError, requestJson } from '@/lib/client/api';
 import SavedEvaluations from '@/components/modelops/SavedEvaluations';
 
-export default function ModelOpsWorkspace({ role }: { role: 'viewer' | 'editor' | 'reviewer' | 'admin' }) {
+export default function ModelOpsWorkspace() {
   const [uiState, setUiState] = useState<UIState>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -149,16 +147,37 @@ export default function ModelOpsWorkspace({ role }: { role: 'viewer' | 'editor' 
 
   return (
     <ErrorBoundary fallbackTitle="ModelOps Portal Exception" fallbackMessage="An isolated error occurred while rendering the evaluation interface.">
-      <div className="min-h-screen flex flex-col bg-[#FAFAFA] text-gray-900 font-sans antialiased">
-        {/* Navigation Bar */}
-        <Navbar
-          role={role}
-          onScrollToForm={scrollToForm}
-          onScrollToHistory={scrollToHistory}
-        />
+      <div className="bg-[#FAFAFA] text-gray-900 font-sans antialiased">
+        <section aria-label="Model card studio actions" className="border-b border-slate-300 bg-white">
+          <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-2 sm:px-6">
+            <nav aria-label="Model card studio sections" className="hidden items-center gap-4 text-xs font-semibold text-slate-600 lg:flex">
+              <a href="#templates" className="hover:text-slate-950">Templates</a>
+              <a href="#features" className="hover:text-slate-950">Platform</a>
+              <a href="#spec" className="hover:text-slate-950">Model Card Spec</a>
+              <a href="#faq" className="hover:text-slate-950">FAQ</a>
+            </nav>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={scrollToHistory}
+                className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2"
+              >
+                <History className="h-3.5 w-3.5" aria-hidden="true" />
+                History
+              </button>
+              <button
+                type="button"
+                onClick={scrollToForm}
+                className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded bg-emerald-800 px-3.5 text-xs font-semibold text-white hover:bg-emerald-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 focus-visible:ring-offset-2"
+              >
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                Generate Card
+              </button>
+            </div>
+          </div>
+        </section>
 
-        {/* Main Application Container */}
-        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pt-20 pb-16">
+        <div className="mx-auto w-full max-w-6xl px-4 pb-16 pt-8 sm:px-6">
           
           {/* Outer White Card Container matching VerifyWise max-w-[1200px] frame */}
           <div className="bg-white border border-gray-300 p-6 sm:p-12 shadow-xs rounded-md">
@@ -309,10 +328,7 @@ export default function ModelOpsWorkspace({ role }: { role: 'viewer' | 'editor' 
             <LandingFeatures />
           </div>
 
-        </main>
-
-        {/* Enterprise Footer */}
-        <Footer />
+        </div>
       </div>
     </ErrorBoundary>
   );

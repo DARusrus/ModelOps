@@ -25,8 +25,29 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm test
+      - run: npm run test:evaluation
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:review-queue
+      - run: npm run test:browser-auth
+      - run: npm run test:catalog
+      - run: npm run test:production-smoke
+      - name: Preserve handbook and client/release regression evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: modelops-handbook-validation-${{ github.sha }}
+          path: |
+            test-results/handbook-evaluation*.json
+            test-results/handbook-evaluation-report.md
+            test-results/review-queue-regression.json
+            test-results/browser-auth-regression.json
+            test-results/evaluation-catalog-regression.json
+            test-results/production-smoke-regression.json
+          retention-days: 30
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
+      - name: Audit development and runtime dependencies
+        run: npm audit --audit-level=moderate
       - name: Generate runtime dependency SBOM
         run: npm sbom --omit=dev --sbom-format=cyclonedx > modelops-sbom.cdx.json
       - name: Preserve runtime dependency SBOM

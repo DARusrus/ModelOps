@@ -28,7 +28,7 @@ export default function EvidencePanel({ modelCard }: EvidencePanelProps) {
       `Model Identity: ${modelCard.model_name || 'Unknown'} (v${modelCard.version || 'N/A'})`,
       `Evaluation Dataset: ${modelCard.dataset || 'Unknown'}`,
       `Deterministic Readiness Score Tool Result: ${typeof modelCard.readiness_score === 'number' ? modelCard.readiness_score : 0}/100`,
-      `Metrics Verified: ${Object.keys(metrics).join(', ') || 'None'}`,
+      `Metrics reported by submitter: ${Object.keys(metrics).join(', ') || 'None'}`,
       `Reproducibility Artifact: ${modelCard.reproducibility || 'Not provided'}`,
     ];
 
@@ -38,7 +38,6 @@ export default function EvidencePanel({ modelCard }: EvidencePanelProps) {
     ? modelCard.next_steps
     : [
       'Perform human governance review before promoting model to production.',
-      'Configure continuous model monitoring for dataset drift and latency spikes.',
     ];
 
   return (
@@ -70,6 +69,7 @@ export default function EvidencePanel({ modelCard }: EvidencePanelProps) {
       <p className="text-xs text-gray-600 leading-relaxed">
         <strong className="text-gray-900">Evidence is not AI output:</strong> official scoring reads only submitted or verified-derived evidence. AI text remains an unverified suggestion and cannot establish a governance fact.
       </p>
+      <p className="text-xs text-gray-600 leading-relaxed">The dataset identifier is submitted metadata; ModelOps has not independently verified the dataset or executed the declared tests.</p>
 
       {/* Grid Section 1: Deterministic Tool Findings vs Model Narrative */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -99,8 +99,10 @@ export default function EvidencePanel({ modelCard }: EvidencePanelProps) {
             <p className="inline-flex rounded border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-[10px] uppercase text-amber-800">{modelCard.ai_suggestions?.status?.replaceAll('_', ' ') || 'deterministic only'}</p>
             <p className="leading-relaxed">
               {modelCard.ai_analysis ||
-                `The AI governance pipeline synthesized the experiment metadata for "${modelCard.model_name || 'this model'}", confirming compatibility with the "${modelCard.dataset || 'target'}" benchmark dataset.`}
+                'No AI analysis was supplied. Dataset compatibility and model safety have not been established.'}
             </p>
+            {!!modelCard.suggested_fixes?.length && <ul className="list-disc space-y-1 pl-4">{modelCard.suggested_fixes.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ul>}
+            {!!modelCard.references?.length && <div className="space-y-1"><p className="font-bold">Guidance sources</p>{modelCard.references.map((reference) => <p key={reference} className="break-all font-mono">{reference}</p>)}</div>}
             {warnings.length > 0 && (
               <div className="mt-2 pt-2 border-t border-amber-200 text-[11px] text-amber-800 space-y-1">
                 <span className="font-bold uppercase block flex items-center gap-1">
