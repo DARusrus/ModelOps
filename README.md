@@ -33,7 +33,7 @@ Structured result is returned for human review
 | Name | Role |
 |------|------|
 | **Ahmed Amir Rusrus** *(Lead)* | Integration Lead / Solution Architect |
-| Moamen Elkholy | AI & Backend Engineer |
+| Haneen Abdelghany | AI & Backend Engineer |
 | Mohamed Said Mohamed Barakat | Product UI & Workflow Engineer |
 | Zein ElDin Mohamed Farouk | Knowledge, Tools & Quality Engineer |
 

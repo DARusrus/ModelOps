@@ -155,7 +155,7 @@ export default function Footer() {
                 <span className="text-gray-600">Ahmed — Architecture & Frontend</span>
               </li>
               <li>
-                <span className="text-gray-600">Moamen — Providers & Engine</span>
+                <span className="text-gray-600">Haneen — Providers & Engine</span>
               </li>
               <li>
                 <span className="text-gray-600">Mohamed — Tools & Rubric Math</span>
